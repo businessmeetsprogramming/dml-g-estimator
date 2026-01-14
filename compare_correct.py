@@ -270,8 +270,13 @@ def get_best_e_model(n_samples, seed=0):
 
 def run_dml(X_all, y_real, y_aug, real_rows, aug_rows, n_folds=5, return_accuracy=False):
     """
-    DML method - SAME as AAE but with better MLP architecture tuning.
-    Uses stratified MLP like AAE but with better hyperparameters.
+    DML method - Optimized with multiple improvements over AAE:
+
+    1. ENSEMBLE G-MODEL: Combines stratified MLP (like AAE) + pooled LR with enhanced features
+    2. ENHANCED FEATURES: diff + z_onehot + z×feature_interactions for pooled model
+    3. ADAPTIVE TEMPERATURE: Calibrates soft label confidence based on sample size
+    4. SAMPLE WEIGHTING: Gives more weight to reliable primary data
+    5. CROSS-FITTED AUGMENTED: Uses cross-fitting for more robust soft labels
     """
     X_p = [X_all[row] for row in real_rows]
     y_p = np.array([y_real[row] for row in real_rows])
@@ -282,103 +287,149 @@ def run_dml(X_all, y_real, y_aug, real_rows, aug_rows, n_folds=5, return_accurac
     n_p = len(y_p)
     n_a = len(z_a)
 
-    # Prepare flat features (same as AAE)
-    X_p_flat = np.array(flatten_full(X_p))
+    # Prepare features
+    X_p_flat = np.array(flatten_full(X_p))  # For stratified MLP
     X_a_flat = np.array(flatten_full(X_a))
+    X_p_enhanced = prepare_features(X_p, z_p)  # For pooled LR
+    X_a_enhanced = prepare_features(X_a, z_a)
 
-    # === Compute out-of-sample g-accuracy with cross-fitting ===
-    g_preds_oof = np.zeros(n_p)
+    # Scale enhanced features
+    scaler = StandardScaler()
+    X_all_enhanced = np.vstack([X_p_enhanced, X_a_enhanced])
+    X_all_scaled = scaler.fit_transform(X_all_enhanced)
+    X_p_scaled = X_all_scaled[:n_p]
+    X_a_scaled = X_all_scaled[n_p:]
+
+    # === ENSEMBLE G-MODEL: Stratified MLP + Pooled LR ===
     kf = KFold(n_splits=n_folds, shuffle=True, random_state=0)
 
-    for train_idx, val_idx in kf.split(X_p_flat):
-        # Train stratified g models for each z value (SAME as AAE)
-        g_models_fold = {}
+    # Store cross-fitted predictions for accuracy
+    g_preds_oof = np.zeros(n_p)
+    g_proba_oof = np.zeros((n_p, 2))
+
+    # Also store cross-fitted predictions for augmented data
+    g_proba_aug_cv = np.zeros((n_a, 2))
+    aug_fold_counts = np.zeros(n_a)
+
+    for fold_idx, (train_idx, val_idx) in enumerate(kf.split(X_p_flat)):
+        # === MODEL 1: Stratified MLP (like AAE) ===
+        g_stratified = {}
         for z_val in [-1, 0, 1]:
             train_z_mask = z_p[train_idx] == z_val
             if np.sum(train_z_mask) < 2:
                 continue
-
             X_train_z = X_p_flat[train_idx][train_z_mask]
             y_train_z = y_p[train_idx][train_z_mask]
-
             if len(np.unique(y_train_z)) == 1:
-                g_models_fold[z_val] = ('constant', y_train_z[0])
+                g_stratified[z_val] = ('constant', y_train_z[0])
             else:
-                # Use SAME architecture as AAE
                 model = MLPClassifier(hidden_layer_sizes=(10, 5), activation='logistic',
                                     solver='adam', alpha=1e-4, max_iter=500, random_state=1)
                 model.fit(X_train_z, y_train_z)
-                g_models_fold[z_val] = ('model', model)
+                g_stratified[z_val] = ('model', model)
 
-        # Predict on validation set
+        # === MODEL 2: Pooled LR with enhanced features ===
+        g_pooled = None
+        if len(np.unique(y_p[train_idx])) > 1:
+            g_pooled = LogisticRegression(C=1.0, max_iter=2000, random_state=1)
+            g_pooled.fit(X_p_scaled[train_idx], y_p[train_idx])
+
+        # === ENSEMBLE: Combine predictions ===
+        # Weight: stratified gets more weight at small n, pooled at large n
+        stratified_weight = max(0.3, min(0.7, 1.0 - n_p / 300))
+        pooled_weight = 1.0 - stratified_weight
+
+        # Predict on validation (primary)
         for i in val_idx:
             z_val = z_p[i]
-            if z_val in g_models_fold:
-                g_type, g_func = g_models_fold[z_val]
+
+            # Stratified prediction
+            if z_val in g_stratified:
+                g_type, g_func = g_stratified[z_val]
                 if g_type == 'constant':
-                    g_preds_oof[i] = g_func
+                    strat_proba = np.array([1.0 - g_func, float(g_func)])
                 else:
-                    g_preds_oof[i] = g_func.predict([X_p_flat[i]])[0]
+                    strat_proba = g_func.predict_proba([X_p_flat[i]])[0]
             else:
-                g_preds_oof[i] = 0
+                strat_proba = np.array([0.5, 0.5])
+
+            # Pooled prediction
+            if g_pooled is not None:
+                pool_proba = g_pooled.predict_proba([X_p_scaled[i]])[0]
+            else:
+                pool_proba = np.array([0.5, 0.5])
+
+            # Ensemble
+            g_proba_oof[i] = stratified_weight * strat_proba + pooled_weight * pool_proba
+            g_preds_oof[i] = np.argmax(g_proba_oof[i])
+
+        # Predict on augmented (cross-fitted for robustness)
+        for i in range(n_a):
+            z_val = z_a[i]
+
+            # Stratified prediction
+            if z_val in g_stratified:
+                g_type, g_func = g_stratified[z_val]
+                if g_type == 'constant':
+                    strat_proba = np.array([1.0 - g_func, float(g_func)])
+                else:
+                    strat_proba = g_func.predict_proba([X_a_flat[i]])[0]
+            else:
+                strat_proba = np.array([0.5, 0.5])
+
+            # Pooled prediction
+            if g_pooled is not None:
+                pool_proba = g_pooled.predict_proba([X_a_scaled[i]])[0]
+            else:
+                pool_proba = np.array([0.5, 0.5])
+
+            # Ensemble
+            g_proba_aug_cv[i] += stratified_weight * strat_proba + pooled_weight * pool_proba
+            aug_fold_counts[i] += 1
+
+    # Average augmented predictions across folds
+    g_proba_aug_cv = g_proba_aug_cv / aug_fold_counts[:, np.newaxis]
 
     g_accuracy = np.mean(g_preds_oof == y_p)
 
-    # === Train FINAL g models on ALL primary data (stratified, SAME as AAE) ===
-    g_function = {}
-    for z_val in [-1, 0, 1]:
-        z_mask = z_p == z_val
-        n_z = np.sum(z_mask)
-        if n_z < 2:
-            continue
-        X_z = X_p_flat[z_mask]
-        y_z = y_p[z_mask]
-        if len(np.unique(y_z)) == 1:
-            g_function[z_val] = ('constant', y_z[0])
-        else:
-            # Use SAME architecture as AAE
-            model = MLPClassifier(hidden_layer_sizes=(10, 5), activation='logistic',
-                                solver='adam', alpha=1e-4, max_iter=500, random_state=1)
-            model.fit(X_z, y_z)
-            g_function[z_val] = ('model', model)
-
-    # === Compute soft labels for AUGMENTED data ===
-    # Apply adaptive temperature scaling based on sample size
-    # Only apply scaling for small samples; larger samples don't need it
-    if n_p <= 75:
-        temperature = 2.0  # High scaling for very small samples
-    elif n_p <= 125:
-        temperature = 1.3  # Moderate scaling
+    # === ADAPTIVE TEMPERATURE SCALING ===
+    if n_p <= 60:
+        temperature = 2.5  # Very high for tiny samples
+    elif n_p <= 100:
+        temperature = 1.8
+    elif n_p <= 150:
+        temperature = 1.3
     else:
-        temperature = 1.0  # No scaling for larger samples
+        temperature = 1.0
+
+    # Apply temperature to augmented soft labels
     w_a = []
     for i in range(n_a):
-        z_val = z_a[i]
-        if z_val in g_function:
-            g_type, g_func = g_function[z_val]
-            if g_type == 'constant':
-                weights = np.array([1.0 - g_func, float(g_func)])
-            else:
-                # Get log odds, apply temperature, convert back
-                proba = g_func.predict_proba([X_a_flat[i]])[0]
-                # Temperature scaling: p_scaled = softmax(log(p) / T)
-                log_odds = np.log(np.clip(proba, 1e-10, 1-1e-10))
-                scaled_odds = log_odds / temperature
-                weights = np.exp(scaled_odds) / np.sum(np.exp(scaled_odds))
-            w_a.append(weights)
+        proba = g_proba_aug_cv[i]
+        if temperature != 1.0:
+            log_odds = np.log(np.clip(proba, 1e-10, 1-1e-10))
+            scaled_odds = log_odds / temperature
+            weights = np.exp(scaled_odds) / np.sum(np.exp(scaled_odds))
         else:
-            # Fallback for missing z values
-            w_a.append(np.array([int(z_val == 0), int(z_val == 1)]))
+            weights = proba
+        w_a.append(weights)
     w_a = np.array(w_a)
 
-    # === Primary gets HARD labels (SAME as AAE) ===
-    w_p = np.array([[int(y == 0), int(y == 1)] for y in y_p])
+    # === PRIMARY: HARD labels (like AAE) ===
+    w_p = np.array([[1 - y, y] for y in y_p], dtype=float)
 
-    # === Combine: Augmented FIRST, then Primary (SAME as AAE) ===
+    # === SAMPLE WEIGHTING: Give more weight to primary ===
+    # This increases the effective sample size of reliable primary data
+    primary_weight = 1.0 + (100 / max(n_p, 50))  # ~3x for n=50, ~2x for n=100, ~1.5x for n=200
+    w_p = w_p * primary_weight
+
+    # === Combine: Augmented FIRST, then Primary ===
     X_c = X_a + X_p
     w_c = np.concatenate([w_a, w_p])
 
-    # Clean up
+    # Normalize weights to sum to n_a + n_p (to keep loss scale consistent)
+    w_c = w_c * (n_a + n_p) / np.sum(w_c)
+
     gc.collect()
 
     beta = fit(X_c, w_c, seed=0)
@@ -425,15 +476,15 @@ def main():
     - Primary Only: Uses ONLY n_real samples (no augmented data)
     - Naive: Uses n_real + n_aug, with z as HARD labels for augmented
     - AAE: Uses n_real + n_aug, MLP(10,5) g(X) stratified by z
-    - DML: Uses n_real + n_aug, SAME MLP g(X) + adaptive temperature scaling
+    - DML: Uses n_real + n_aug, OPTIMIZED ensemble with multiple improvements
     - PPI: Prediction-Powered Inference
 
-    DML improvement over AAE:
-    - Uses SAME g-model architecture (MLP stratified by z)
-    - Adds adaptive temperature scaling to soft labels
-      - T=2.0 for n<=75 (reduces variance in very small samples)
-      - T=1.3 for n<=125
-      - T=1.0 for n>125 (no scaling for larger samples)
+    DML optimizations over AAE:
+    1. ENSEMBLE G-MODEL: Stratified MLP + Pooled LR with enhanced features
+    2. ENHANCED FEATURES: diff + z_onehot + z×feature_interactions
+    3. ADAPTIVE TEMPERATURE: Calibrates soft label confidence (T=2.5 to 1.0)
+    4. SAMPLE WEIGHTING: More weight on reliable primary data
+    5. CROSS-FITTED AUGMENTED: Uses cross-fitting for robust soft labels
 
     NOTE: Both g-accuracy measured OUT-OF-SAMPLE via 5-fold cross-validation
     """)
