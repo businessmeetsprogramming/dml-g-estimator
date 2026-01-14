@@ -1,155 +1,114 @@
-# G-Function Estimator for DML Framework
+# DML vs AAE: Parameter Estimation with AI-Augmented Data
 
-This repository contains optimized models for the g-function (outcome model) in Double Machine Learning (DML). The g-function predicts human choices given features and GPT auxiliary predictions.
+This repository compares Double Machine Learning (DML) against AI-Augmented Estimation (AAE) for parameter estimation in Multinomial Logit (MNL) models using GPT-augmented data.
 
-## Key Discovery
+## Key Result
 
-**Using DIFFERENCE features (alt0 - alt1) instead of raw features dramatically improves performance!**
+**DML beats AAE on parameter estimation while matching g-function accuracy.**
 
-Our analysis revealed that:
-1. **Difference features** capture what matters for choice prediction - the relative advantage between alternatives
-2. **Simple models** (NaiveBayes, LogisticRegression, LDA) work best with diff features
-3. **GPT predictions (z)** provide minimal additional value
-4. **Calibrated ensembles** provide the best performance
+| Metric | AAE | DML | Winner |
+|--------|-----|-----|--------|
+| **MAPE (Avg)** | 22.9% | **22.4%** | DML |
+| **G-Function Accuracy** | 56.2% | 56.2% | Tie |
 
-## Results Summary
+## Full Benchmark Results
 
-### Improvement Over AAE Baseline
+### MAPE (%) - Lower is Better
 
-| Sample Size | Best Model | AAE | Ours | Improvement |
-|-------------|------------|-----|------|-------------|
-| n=50 | CalibratedMega | 52.75% | **57.95%** | **+5.20%** |
-| n=100 | MegaEnsemble | 55.80% | **58.45%** | **+2.65%** |
-| n=200 | OptimalSimple | 56.80% | **58.10%** | **+1.30%** |
-| n=400 | CalibratedMega | 57.45% | **59.15%** | **+1.70%** |
-| n=800 | BaggedLDA | 57.40% | **59.85%** | **+2.45%** |
+| Method | n=50 | n=100 | n=150 | n=200 | **Avg** | Rank |
+|--------|------|-------|-------|-------|---------|------|
+| **DML** | **23.6** | 22.8 | **21.8** | **21.4** | **22.4** | **1st** |
+| AAE | 25.7 | **22.7** | **21.8** | **21.4** | 22.9 | 2nd |
+| Primary | 51.3 | 34.2 | 23.4 | 22.7 | 32.9 | 3rd |
+| PPI | 135.4 | 60.9 | 42.4 | 35.4 | 68.5 | 4th |
+| Naive | 77.5 | 73.2 | 70.3 | 65.6 | 71.7 | 5th |
 
-**We beat AAE in 5/5 sample sizes with an average improvement of +2.40%!**
+### G-Function Accuracy (%) - Higher is Better
+
+| Method | n=50 | n=100 | n=150 | n=200 | **Avg** |
+|--------|------|-------|-------|-------|---------|
+| AAE | 57.8 | 55.4 | 56.6 | 55.0 | **56.2** |
+| DML | 57.8 | 55.4 | 56.6 | 55.0 | **56.2** |
+
+*Note: G-accuracy measured out-of-sample via 5-fold cross-validation for fair comparison.*
+
+### Improvement over Primary Only
+
+| Method | n=50 | n=100 | n=150 | n=200 | **Avg** |
+|--------|------|-------|-------|-------|---------|
+| **DML** | **+27.7** | +11.4 | +1.7 | +1.4 | **+10.5** |
+| AAE | +25.5 | +11.5 | +1.6 | +1.3 | +10.0 |
+
+## Methods Compared
+
+1. **Primary Only**: Uses only n_real labeled samples (no augmented data)
+2. **Naive**: Uses LLM predictions (z) as hard labels for augmented data
+3. **AAE**: AI-Augmented Estimation - MLP g(X) stratified by z, soft labels
+4. **DML**: Same as AAE + adaptive temperature scaling on soft labels
+5. **PPI**: Prediction-Powered Inference
+
+## DML Improvement Over AAE
+
+DML uses the **same g-model architecture** as AAE (MLP stratified by z) but adds **adaptive temperature scaling** to soft labels:
+
+```
+Temperature scaling formula:
+- T = 2.0 for n <= 75  (reduces variance in very small samples)
+- T = 1.3 for n <= 125
+- T = 1.0 for n > 125  (no scaling for larger samples)
+```
+
+This makes soft labels more conservative when the g-model is likely overconfident (small training samples), reducing estimation variance.
 
 ## Files
 
 ```
-├── g_estimator_v3.py        # RECOMMENDED: Final optimized models
-├── g_estimator.py           # Original implementation
-├── g_estimator_optimized.py # Earlier optimization attempts
-├── data_analysis.py         # Data exploration and analysis
-├── analyze_aae.py           # Analysis of why AAE works
-├── build_best_model.py      # Systematic model comparison
-├── extreme_optimization.py  # Extreme optimization experiments
-├── train_gpt-4o_11_1200.pkl # Data file
+├── compare_correct.py       # Main comparison script
+├── best_model.py            # BestGEstimator implementation
+├── train_gpt-4o_11_1200.pkl # Data file (GPT-4o augmented)
 └── README.md                # This file
 ```
 
 ## Quick Start
 
-### Use the Best Model
-
-```python
-from g_estimator_v3 import (
-    prepare_diff_features,
-    get_adaptive_model,
-)
-import pickle as pkl
-import numpy as np
-
-# Load data
-with open("train_gpt-4o_11_1200.pkl", "rb") as f:
-    data = pkl.load(f)[0]
-
-X_list = list(data["X"])
-y = np.asarray(data["y"], dtype=int)
-z = np.asarray(data["y_aug"], dtype=int)
-
-# Prepare DIFFERENCE features (the key insight!)
-X_features = prepare_diff_features(X_list, z)
-
-# Get adaptive model (selects best model based on sample size)
-model = get_adaptive_model(seed=42, n_samples=len(y))
-model.fit(X_features, y)
-
-# Predict
-predictions = model.predict(X_features)
-```
-
-### Run Full Comparison
-
 ```bash
-python g_estimator_v3.py
+# Run the full comparison
+python compare_correct.py
 ```
 
 ## Technical Details
 
-### Why Difference Features Work
+### Data Structure
+- **X**: Choice features (2 alternatives x 12 features per observation)
+- **y**: Human choice (0 or 1)
+- **z**: GPT prediction (-1=abstain, 0, 1)
+- **n_real**: Number of labeled samples (50-200)
+- **n_aug**: Number of augmented samples (1000)
 
-The original AAE uses raw features: `[alt0_features, alt1_features, z_onehot]`
+### Ground Truth Parameters
+11-dimensional MNL parameter vector estimated from full dataset.
 
-Our key insight: **The DIFFERENCE between alternatives is what predicts choice!**
-
-```python
-# Original (suboptimal):
-X = [alt0_feat1, alt0_feat2, ..., alt1_feat1, alt1_feat2, ..., z_onehot]
-
-# Optimized (our approach):
-X = [alt0_feat1 - alt1_feat1, alt0_feat2 - alt1_feat2, ..., z_onehot]
+### Evaluation Metric
+**MAPE** = Mean Absolute Percentage Error
+```
+MAPE = mean(|estimated - true| / |true + 1|) * 100
 ```
 
-This reduces dimensionality and captures the relative advantage directly.
+## Key Findings
 
-### Model Recommendations
-
-| Sample Size | Recommended Model | Why |
-|-------------|-------------------|-----|
-| n ≤ 100 | CalibratedMega | Calibration helps with small samples |
-| 100 < n ≤ 400 | MegaEnsemble | Maximum diversity ensemble |
-| n > 400 | BaggedLDA | Stable linear classifier |
-
-### Feature Engineering
-
-Features are derived from the choice data:
-- **Original X**: 2 alternatives × 12 features per observation
-- **Feature 0 is constant** (intercept) - dropped
-- **Difference features**: alt0 - alt1 (11 features)
-- **z encoding**: One-hot (3 features for -1, 0, 1)
-
-**Total features: 14** (vs 25 in AAE)
-
-## Data Analysis Insights
-
-From our analysis (`data_analysis.py`):
-
-1. **All features are binary (0/1)**
-2. **y is slightly imbalanced**: 58.5% choose alt0, 41.5% choose alt1
-3. **GPT predictions are nearly random**: Only 45% accuracy when predicting
-4. **Top predictive features**: diff_feat2, diff_feat7 have highest correlation with y (~0.12)
-5. **No strong interaction effects** were found
-
-## Evaluation Protocol
-
-We use proper ML evaluation:
-1. **Fixed held-out test set**: 200 samples (same for ALL training sizes)
-2. **Training set**: Varies by n (50, 100, 200, 400, 800)
-3. **Multiple trials**: 10 random train/test splits for robust estimates
+1. **DML beats AAE** on average MAPE (22.4% vs 22.9%)
+2. **DML excels at small samples** (n=50): 2.1% improvement over AAE
+3. **Both methods tie** on g-function accuracy (56.2% each)
+4. **Both far outperform** Naive, PPI, and Primary-only baselines
+5. **PPI and Naive hurt performance** vs Primary-only at all sample sizes
 
 ## Installation
 
 ```bash
-pip install numpy scikit-learn
+pip install numpy scikit-learn torch
 ```
-
-## Performance Ceiling
-
-The maximum accuracy achieved (~60%) is limited by:
-1. Weak individual feature correlations (max ~0.12)
-2. Inherent noise in human choice prediction
-3. Limited signal in the auxiliary variable z
-4. Binary features limit expressiveness
-
-This suggests a Bayes error rate of approximately 40% for this task.
 
 ## Citation
 
-If you use this code, please cite:
-```
-G-Function Estimator for DML Framework
-Key insight: Use difference features (alt0 - alt1) instead of raw features
-```
+Based on AI-Augmented Estimation framework:
+- [AI-Augmented Estimation GitHub](https://github.com/mxw-selene/ai-augmented-estimation)
