@@ -274,53 +274,198 @@ from pytorch_tabnet.tab_model import TabNetClassifier
 
 ---
 
+## Expert Recommendations: Targeted Roadmaps for Small-N Binary Choice
+
+*The following roadmaps are specifically tailored for high-noise, small-sample, discrete-choice problems. Standard Deep Learning (TabNet/Transformers) is statistically likely to overfit given our constraints (N=50-800, binary features, weak signal).*
+
+### Roadmap 1: Factorization Machines (Interaction Modeling) ⭐ HIGH PRIORITY
+
+**Scientific Rationale:**
+We identified that "Difference" features work best. However, second-order interactions (diff_i × diff_j) failed in our tests. This is likely because full interaction matrices are too sparse for N=50. **Factorization Machines (FM)** solve this by learning latent vectors for interactions, reducing the parameter space from O(d²) to O(dk). This is the standard solution for sparse binary interaction data (e.g., CTR prediction).
+
+**Execution Plan:**
+```python
+# Libraries: xlearn or fastFM
+from fastFM import als
+
+# Key insight: Do NOT manually engineer "difference" features!
+# Feed raw binary features of both alternatives + Z
+X = [alt0_features, alt1_features, z]
+
+# Let FM learn the latent interaction between Feature_A_Alt1 and Feature_A_Alt2
+# The dot product of latent vectors effectively learns "difference" with regularization
+fm = als.FMClassification(n_iter=1000, rank=8, l2_reg_w=0.1, l2_reg_V=0.5)
+```
+
+**Why This Should Work:**
+- FMs capture interactions that manual polynomial features missed due to dimensionality
+- Regularized latent factors prevent overfitting on small N
+- Specifically designed for sparse binary data
+
+---
+
+### Roadmap 2: Bayesian Additive Regression Trees (BART) ⭐⭐ HIGHEST PRIORITY
+
+**Scientific Rationale:**
+Random Forests (which we tried) are frequentist and can be "greedy." For N=50-100, uncertainty is massive. **BART** is a sum-of-trees model using Bayesian priors to constrain trees to be weak learners. Empirically, BART often outperforms RF and GBM on small-to-medium tabular datasets because prior regularization prevents overfitting.
+
+**Execution Plan:**
+```python
+# Best implementation: R's dbarts (use via rpy2) or PyMC-BART
+# Python alternative: bartpy
+
+from bartpy.sklearnmodel import SklearnModel
+
+# Use difference features
+X = diff_features  # (n, 11)
+
+bart = SklearnModel(n_trees=50, n_chains=4, n_samples=200)
+bart.fit(X, y)
+
+# BART provides posterior distribution, not just point estimates
+predictions = bart.predict(X_test)  # Averaged posterior
+```
+
+**Why This Should Work:**
+- Handles non-linearities that Linear/Logistic regression miss
+- Bayesian prior prevents overfitting (unlike greedy boosting)
+- No data hunger like Neural Networks
+- Gold standard for small-sample non-linear modeling
+
+---
+
+### Roadmap 3: Structural Econometric Modeling (Mixed Logit) ⭐ HIGH PRIORITY
+
+**Scientific Rationale:**
+This is fundamentally a **Discrete Choice** problem. Our "Difference Features" discovery strongly suggests the data follows **Utility Theory** structure: U = βX + ε. Standard ML models (SVM, MLP) ignore this structural truth. **Mixed Logit** (Random Parameters Logit) allows β coefficients to vary per observation, capturing unobserved heterogeneity that standard Logistic Regression assumes is constant.
+
+**Execution Plan:**
+```python
+# Libraries: Biogeme (Python) or PyLogit
+import pylogit as pl
+
+# Define utility functions explicitly
+# V_0 = β₀ + β₁*X₀₁ + β₂*X₀₂ + ...
+# V_1 = β₀ + β₁*X₁₁ + β₂*X₁₂ + ...
+
+# Allow specific βs to be random (normally distributed)
+# This captures heterogeneity in preferences
+model = pl.create_choice_model(
+    data=long_format_data,
+    model_type="Mixed Logit",
+    mixing_vars=['feature_2', 'feature_7'],  # Top predictive features
+    mixing_id_col="observation_id"
+)
+```
+
+**Why This Should Work:**
+- Explicitly models the "Choice" mechanism (not generic pattern recognition)
+- Mixed effects capture individual heterogeneity
+- Theoretically grounded in economics/psychology
+- Interpretable coefficients
+
+---
+
+### Roadmap 4: Bayesian Prior Injection (Z as Prior, not Feature) ⭐ MEDIUM PRIORITY
+
+**Scientific Rationale:**
+We noted "GPT predictions are nearly useless" (~45% accuracy). Currently Z is used as a feature (one-hot). In a Bayesian framework, Z should be a **Prior**, not a feature. Even a weak signal, when treated as a weak prior, can stabilize estimation for N=50 better than adding it as a noisy column.
+
+**Execution Plan:**
+```python
+import pymc as pm
+
+with pm.Model() as model:
+    # Instead of standard N(0, 1) priors, condition on Z
+
+    # Approach 1: Z affects class prior
+    # If Z=1, prior P(y=1) is slightly elevated
+    # If Z=0, uninformative prior
+
+    alpha = pm.Normal('alpha', mu=0, sigma=1)
+
+    # Z-conditioned prior shift
+    z_effect = pm.Normal('z_effect', mu=0, sigma=0.5)
+
+    # Coefficients for difference features
+    betas = pm.Normal('betas', mu=0, sigma=1, shape=11)
+
+    # Linear predictor with Z as prior adjustment
+    logit_p = alpha + z_effect * z + pm.math.dot(X_diff, betas)
+
+    y_obs = pm.Bernoulli('y', logit_p=logit_p, observed=y)
+```
+
+**Why This Should Work:**
+- Prevents over-learning noise in tiny N=50 datasets
+- Anchors model weakly to GPT suggestion (proper uncertainty handling)
+- Better calibrated predictions
+- Principled handling of auxiliary information
+
+---
+
+### Updated Priority Rankings
+
+| Priority | Approach | Rationale |
+|----------|----------|-----------|
+| ⭐⭐ **Highest** | BART | Best trade-off for non-linearity + small data |
+| ⭐ **High** | Factorization Machines | Best for binary feature interactions |
+| ⭐ **High** | Mixed Logit | Most theoretically correct for choice data |
+| ⭐ **Medium** | Bayesian Prior (Z) | Better uncertainty handling |
+| Lower | Deep Learning | Likely to overfit with N=50-800 |
+
+---
+
 ## Recommended Next Steps (Priority Order)
 
 ### High Priority (Most Likely to Help)
 
-1. **AutoML (Auto-sklearn or H2O)**
-   - Automated search may find better configurations
-   - Easy to implement, comprehensive search
+1. **BART (Bayesian Additive Regression Trees)** ⭐⭐
+   - Best for small samples with non-linear patterns
+   - Bayesian regularization prevents overfitting
+   - Libraries: bartpy, PyMC-BART, or R's dbarts
 
-2. **TabNet**
-   - Designed for tabular data
-   - Attention may help with feature selection
+2. **Factorization Machines** ⭐
+   - Learns sparse interactions efficiently
+   - Reduces O(d²) to O(dk) parameters
+   - Libraries: xlearn, fastFM
 
-3. **Super Learner**
+3. **Mixed Logit (Choice Model)** ⭐
+   - Theoretically correct for discrete choice
+   - Captures preference heterogeneity
+   - Libraries: Biogeme, PyLogit
+
+4. **Super Learner**
    - Theoretically optimal ensemble
    - Better than ad-hoc weighting
 
-4. **Ensemble Weight Optimization**
+5. **Ensemble Weight Optimization**
    - Current weights are hand-tuned
    - Optimization may find better weights
 
 ### Medium Priority
 
-5. **Gaussian Process Classification**
+6. **Bayesian Prior Injection**
+   - Use Z as prior, not feature
+   - Better for small samples
+
+7. **Gaussian Process Classification**
    - Good for small samples
    - Uncertainty quantification
 
-6. **Dynamic Ensemble Selection**
+8. **Dynamic Ensemble Selection**
    - Instance-specific ensemble
    - May capture heterogeneity in data
 
-7. **Symbolic Regression (PySR)**
-   - May discover interpretable patterns
-   - Feature construction
-
 ### Lower Priority (Experimental)
 
-8. **Deep Learning (TabTransformer, FT-Transformer)**
-   - May work but needs more data
-   - Worth trying with careful regularization
+9. **AutoML (Auto-sklearn or H2O)**
+   - Automated search may find better configurations
+   - But may not find domain-specific solutions
 
-9. **Semi-Supervised Learning**
-   - Pseudo-labeling, co-training
-   - May help leverage unlabeled structure
-
-10. **Choice Models**
-    - Theoretical foundation
-    - May provide insights even if accuracy doesn't improve
+10. **Deep Learning (TabNet, Transformers)**
+    - Likely to overfit with N=50-800
+    - Only try with heavy regularization
 
 ---
 
