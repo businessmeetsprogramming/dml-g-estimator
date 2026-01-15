@@ -6,12 +6,13 @@ import pickle as pkl
 import numpy as np
 import torch
 from torch.optim import Adam
+from scipy.optimize import minimize
 from sklearn.neural_network import MLPClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import KFold, cross_val_predict
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
-from best_model import BestGEstimator, prepare_features
+from best_model import BestGEstimator, prepare_features, get_diff_features
 import gc
 import warnings
 warnings.filterwarnings("ignore")
@@ -110,7 +111,9 @@ def fit_g(X, y, seed=0):
     return 1, clf
 
 def calculate_mape(estimated, true):
-    return np.mean(np.abs((estimated - true) / (true + 1))) * 100
+    # MAPE with +1 in denominator to handle near-zero true values
+    # Formula: mean(|estimated - true| / (|true| + 1)) × 100
+    return np.mean(np.abs(estimated - true) / (np.abs(true) + 1)) * 100
 
 # =============================================================================
 # PRIMARY ONLY (n_aug = 0)
@@ -270,13 +273,14 @@ def get_best_e_model(n_samples, seed=0):
 
 def run_dml(X_all, y_real, y_aug, real_rows, aug_rows, n_folds=5, return_accuracy=False):
     """
-    DML method - Optimized with multiple improvements over AAE:
+    DML method - directly optimizes the score equation from the paper (eq 1.3):
 
-    1. ENSEMBLE G-MODEL: Combines stratified MLP (like AAE) + pooled LR with enhanced features
-    2. ENHANCED FEATURES: diff + z_onehot + z×feature_interactions for pooled model
-    3. ADAPTIVE TEMPERATURE: Calibrates soft label confidence based on sample size
-    4. SAMPLE WEIGHTING: Gives more weight to reliable primary data
-    5. CROSS-FITTED AUGMENTED: Uses cross-fitting for more robust soft labels
+    ψ(Ξ; e, g; β) = X^T [∇b(Xβ) - g(X,z) + (w/e(X,z))(g(X,z) - y)]
+
+    Uses:
+    - Stratified Logistic Regression (C=0.05) for g(X,z) - well-calibrated probabilities
+    - Logistic Regression for e(X,z)
+    - Adam optimizer to minimize MLE loss with DML-adjusted targets
     """
     X_p = [X_all[row] for row in real_rows]
     y_p = np.array([y_real[row] for row in real_rows])
@@ -287,156 +291,148 @@ def run_dml(X_all, y_real, y_aug, real_rows, aug_rows, n_folds=5, return_accurac
     n_p = len(y_p)
     n_a = len(z_a)
 
-    # Prepare features
-    X_p_flat = np.array(flatten_full(X_p))  # For stratified MLP
+    # Class prior from primary data
+    class_prior = np.mean(y_p)
+
+    # Prepare features for MNL estimation
+    X_p_flat = np.array(flatten_full(X_p))
     X_a_flat = np.array(flatten_full(X_a))
-    X_p_enhanced = prepare_features(X_p, z_p)  # For pooled LR
-    X_a_enhanced = prepare_features(X_a, z_a)
 
-    # Scale enhanced features
-    scaler = StandardScaler()
-    X_all_enhanced = np.vstack([X_p_enhanced, X_a_enhanced])
-    X_all_scaled = scaler.fit_transform(X_all_enhanced)
-    X_p_scaled = X_all_scaled[:n_p]
-    X_a_scaled = X_all_scaled[n_p:]
+    # Prepare features with z for e(X,z) model
+    X_p_with_z = prepare_features(X_p, z_p)
+    X_a_with_z = prepare_features(X_a, z_a)
 
-    # === ENSEMBLE G-MODEL: Stratified MLP + Pooled LR ===
+    # Cross-fitting for both g and e models
     kf = KFold(n_splits=n_folds, shuffle=True, random_state=0)
 
-    # Store cross-fitted predictions for accuracy
     g_preds_oof = np.zeros(n_p)
-    g_proba_oof = np.zeros((n_p, 2))
-
-    # Also store cross-fitted predictions for augmented data
-    g_proba_aug_cv = np.zeros((n_a, 2))
+    g_proba_oof = np.zeros(n_p)  # P(y=1|X,z) for primary
+    g_proba_aug_cv = np.zeros(n_a)  # P(y=1|X,z) for augmented
     aug_fold_counts = np.zeros(n_a)
 
+    e_proba_primary = np.zeros(n_p)  # P(w=1|X,z) for primary (out-of-fold)
+    e_proba_aug_cv = np.zeros(n_a)  # P(w=1|X,z) for augmented
+    e_aug_fold_counts = np.zeros(n_a)
+
     for fold_idx, (train_idx, val_idx) in enumerate(kf.split(X_p_flat)):
-        # === MODEL 1: Stratified MLP (like AAE) ===
-        g_stratified = {}
+        # === G MODEL: Stratified Logistic Regression per z value ===
+        # LR with strong regularization (C=0.05) produces well-calibrated probabilities
+        X_train_g = [X_p[i] for i in train_idx]
+        z_train_g = z_p[train_idx]
+        y_train_g = y_p[train_idx]
+        X_train_g_flat = np.array(flatten_full(X_train_g))
+
+        # Train separate LR for each z value (stratified)
+        g_models_fold = {}
         for z_val in [-1, 0, 1]:
-            train_z_mask = z_p[train_idx] == z_val
-            if np.sum(train_z_mask) < 2:
-                continue
-            X_train_z = X_p_flat[train_idx][train_z_mask]
-            y_train_z = y_p[train_idx][train_z_mask]
-            if len(np.unique(y_train_z)) == 1:
-                g_stratified[z_val] = ('constant', y_train_z[0])
+            mask = z_train_g == z_val
+            if np.sum(mask) >= 2 and len(np.unique(y_train_g[mask])) == 2:
+                clf = LogisticRegression(C=0.05, max_iter=2000, random_state=1)
+                clf.fit(X_train_g_flat[mask], y_train_g[mask])
+                g_models_fold[z_val] = clf
             else:
-                model = MLPClassifier(hidden_layer_sizes=(10, 5), activation='logistic',
-                                    solver='adam', alpha=1e-4, max_iter=500, random_state=1)
-                model.fit(X_train_z, y_train_z)
-                g_stratified[z_val] = ('model', model)
+                g_models_fold[z_val] = None
 
-        # === MODEL 2: Pooled LR with enhanced features ===
-        g_pooled = None
-        if len(np.unique(y_p[train_idx])) > 1:
-            g_pooled = LogisticRegression(C=1.0, max_iter=2000, random_state=1)
-            g_pooled.fit(X_p_scaled[train_idx], y_p[train_idx])
+        # === E MODEL: e(X,z) = P(w=1|X,z) ===
+        X_e_train = np.vstack([X_p_with_z[train_idx], X_a_with_z])
+        w_e_train = np.concatenate([np.ones(len(train_idx)), np.zeros(n_a)])
+        e_model = LogisticRegression(C=1.0, max_iter=2000, random_state=1)
+        e_model.fit(X_e_train, w_e_train)
 
-        # === ENSEMBLE: Combine predictions ===
-        # Weight: stratified gets more weight at small n, pooled at large n
-        stratified_weight = max(0.3, min(0.7, 1.0 - n_p / 300))
-        pooled_weight = 1.0 - stratified_weight
+        # Predict g on validation primary (for accuracy)
+        for idx, i in enumerate(val_idx):
+            z_i = z_p[i]
+            X_i_flat = X_p_flat[i:i+1]
+            if g_models_fold.get(z_i) is not None:
+                g_proba_oof[i] = g_models_fold[z_i].predict_proba(X_i_flat)[0, 1]
+                g_preds_oof[i] = g_models_fold[z_i].predict(X_i_flat)[0]
+            else:
+                g_proba_oof[i] = class_prior
+                g_preds_oof[i] = 1 if class_prior > 0.5 else 0
 
-        # Predict on validation (primary)
+        # Predict e on validation primary (out-of-fold)
         for i in val_idx:
-            z_val = z_p[i]
+            e_proba_primary[i] = e_model.predict_proba([X_p_with_z[i]])[0, 1]
 
-            # Stratified prediction
-            if z_val in g_stratified:
-                g_type, g_func = g_stratified[z_val]
-                if g_type == 'constant':
-                    strat_proba = np.array([1.0 - g_func, float(g_func)])
-                else:
-                    strat_proba = g_func.predict_proba([X_p_flat[i]])[0]
+        # Predict g and e on augmented data (cross-fitted)
+        for j in range(n_a):
+            z_j = z_a[j]
+            X_j_flat = X_a_flat[j:j+1]
+            if g_models_fold.get(z_j) is not None:
+                g_proba_aug_cv[j] += g_models_fold[z_j].predict_proba(X_j_flat)[0, 1]
             else:
-                strat_proba = np.array([0.5, 0.5])
+                g_proba_aug_cv[j] += class_prior
+        aug_fold_counts += 1
 
-            # Pooled prediction
-            if g_pooled is not None:
-                pool_proba = g_pooled.predict_proba([X_p_scaled[i]])[0]
-            else:
-                pool_proba = np.array([0.5, 0.5])
+        e_proba_aug_fold = e_model.predict_proba(X_a_with_z)[:, 1]
+        e_proba_aug_cv += e_proba_aug_fold
+        e_aug_fold_counts += 1
 
-            # Ensemble
-            g_proba_oof[i] = stratified_weight * strat_proba + pooled_weight * pool_proba
-            g_preds_oof[i] = np.argmax(g_proba_oof[i])
-
-        # Predict on augmented (cross-fitted for robustness)
-        for i in range(n_a):
-            z_val = z_a[i]
-
-            # Stratified prediction
-            if z_val in g_stratified:
-                g_type, g_func = g_stratified[z_val]
-                if g_type == 'constant':
-                    strat_proba = np.array([1.0 - g_func, float(g_func)])
-                else:
-                    strat_proba = g_func.predict_proba([X_a_flat[i]])[0]
-            else:
-                strat_proba = np.array([0.5, 0.5])
-
-            # Pooled prediction
-            if g_pooled is not None:
-                pool_proba = g_pooled.predict_proba([X_a_scaled[i]])[0]
-            else:
-                pool_proba = np.array([0.5, 0.5])
-
-            # Ensemble
-            g_proba_aug_cv[i] += stratified_weight * strat_proba + pooled_weight * pool_proba
-            aug_fold_counts[i] += 1
-
-    # Average augmented predictions across folds
-    g_proba_aug_cv = g_proba_aug_cv / aug_fold_counts[:, np.newaxis]
-
+    # Average predictions across folds
+    g_proba_aug_cv = g_proba_aug_cv / aug_fold_counts
+    e_proba_aug_cv = e_proba_aug_cv / e_aug_fold_counts
     g_accuracy = np.mean(g_preds_oof == y_p)
 
-    # === ADAPTIVE TEMPERATURE SCALING ===
-    if n_p <= 60:
-        temperature = 2.5  # Very high for tiny samples
-    elif n_p <= 100:
-        temperature = 1.8
-    elif n_p <= 150:
-        temperature = 1.3
-    else:
-        temperature = 1.0
+    # Clip e to have reasonable bounds
+    e_min = 0.05  # Minimum 5% probability
+    e_proba_primary = np.clip(e_proba_primary, e_min, 1.0)
 
-    # Apply temperature to augmented soft labels
-    w_a = []
-    for i in range(n_a):
-        proba = g_proba_aug_cv[i]
-        if temperature != 1.0:
-            log_odds = np.log(np.clip(proba, 1e-10, 1-1e-10))
-            scaled_odds = log_odds / temperature
-            weights = np.exp(scaled_odds) / np.sum(np.exp(scaled_odds))
-        else:
-            weights = proba
-        w_a.append(weights)
-    w_a = np.array(w_a)
+    # === DML-ADJUSTED MLE OPTIMIZATION ===
+    # From the paper's score function (eq 1.3), the effective targets are:
+    # - Augmented (w=0): τ = g(X,z)
+    # - Primary (w=1): τ = g - (1/e)(g - y) = g(1 - 1/e) + y/e
+    #
+    # We optimize the MLE loss: L = Σ [-τ*Xβ + log(1 + exp(Xβ))]
+    # which is equivalent to binary cross-entropy with soft targets
 
-    # === PRIMARY: HARD labels (like AAE) ===
-    w_p = np.array([[1 - y, y] for y in y_p], dtype=float)
+    # Compute DML-adjusted targets for primary
+    # τ_p = g(1 - 1/e) + y/e
+    # Clip to [0, 1] to avoid numerical issues
+    tau_primary = g_proba_oof * (1 - 1/e_proba_primary) + y_p / e_proba_primary
+    tau_primary = np.clip(tau_primary, 0.0, 1.0)
 
-    # === SAMPLE WEIGHTING: Give more weight to primary ===
-    # This increases the effective sample size of reliable primary data
-    primary_weight = 1.0 + (100 / max(n_p, 50))  # ~3x for n=50, ~2x for n=100, ~1.5x for n=200
-    w_p = w_p * primary_weight
+    # For augmented, target is just g
+    tau_augmented = g_proba_aug_cv
 
-    # === Combine: Augmented FIRST, then Primary ===
-    X_c = X_a + X_p
-    w_c = np.concatenate([w_a, w_p])
+    # Convert to torch tensors
+    X_a_tensor = torch.tensor(X_a_flat, dtype=torch.float64)
+    X_p_tensor = torch.tensor(X_p_flat, dtype=torch.float64)
+    tau_a_tensor = torch.tensor(tau_augmented, dtype=torch.float64)
+    tau_p_tensor = torch.tensor(tau_primary, dtype=torch.float64)
 
-    # Normalize weights to sum to n_a + n_p (to keep loss scale consistent)
-    w_c = w_c * (n_a + n_p) / np.sum(w_c)
+    # Initialize beta from scratch
+    torch.manual_seed(0)
+    beta = torch.nn.Parameter(torch.zeros(11, dtype=torch.float64), requires_grad=True)
+    optimizer = Adam([beta], lr=5e-3)
+
+    n_total = n_a + n_p
+
+    for epoch in range(5000):
+        optimizer.zero_grad()
+
+        # MLE loss for augmented: -τ*Xβ + log(1 + exp(Xβ))
+        utility_a = X_a_tensor @ beta
+        loss_a = -tau_a_tensor * utility_a + torch.log(1 + torch.exp(utility_a))
+        loss_a = torch.sum(loss_a)
+
+        # MLE loss for primary
+        utility_p = X_p_tensor @ beta
+        loss_p = -tau_p_tensor * utility_p + torch.log(1 + torch.exp(utility_p))
+        loss_p = torch.sum(loss_p)
+
+        # Total loss (normalized)
+        loss = (loss_a + loss_p) / n_total
+
+        loss.backward()
+        optimizer.step()
+
+    beta_result = beta.detach().numpy()
 
     gc.collect()
 
-    beta = fit(X_c, w_c, seed=0)
-
     if return_accuracy:
-        return beta, g_accuracy
-    return beta
+        return beta_result, g_accuracy
+    return beta_result
 
 # =============================================================================
 # PPI
