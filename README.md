@@ -18,11 +18,11 @@ Implementation of the Double Machine Learning (DML) estimator from:
 | AAE | 21.2 | 17.3 | 16.3 | 16.3 | 17.8 | 3rd |
 | Primary Only | 49.2 | 29.3 | 22.3 | 20.9 | 30.4 | 4th |
 | Naive | 54.8 | 52.3 | 49.9 | 47.2 | 51.1 | 5th |
-| PPI | 546.1 | 383.3 | 331.5 | 302.9 | 391.0 | 6th |
+| PPI | 565.3 | 379.3 | 325.4 | 306.0 | 394.0 | 6th |
 
-*Results with n_aug=1000. DML/DML-2/Primary: 30 trials. AAE/Naive/PPI: 20 trials.*
+*Results with n_aug=1000. DML/DML-2/Primary: 30 trials. AAE/Naive/PPI: 20 trials. PPI excludes z=-1 abstentions.*
 
-**Note on PPI:** Prediction-Powered Inference (Angelopoulos et al. 2023) is designed for a different inference setting where AI predictions serve as a direct proxy for the outcome. In our GLM augmentation setting, where AI labels have a different structure (z ∈ {-1, 0, 1} vs binary y), PPI's assumptions are violated, leading to poor performance.
+**Note on PPI:** Prediction-Powered Inference ([Angelopoulos et al. 2023](https://arxiv.org/abs/2301.09633)) assumes AI predictions are direct proxies for y. In this setting, AI accuracy is only 57%, so PPI struggles. DML instead learns g(X,z) = E[y|X,z], using z as a feature rather than assuming z ≈ y.
 
 ### Improvement Summary
 
