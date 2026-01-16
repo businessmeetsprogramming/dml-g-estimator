@@ -1,7 +1,7 @@
 \documentclass{article}
 
 % Use ICML 2025 style
-\usepackage{icml2025}
+\usepackage[accepted]{icml2025}
 
 % Standard packages
 \usepackage{microtype}
@@ -47,12 +47,23 @@
 \twocolumn[
 \icmltitle{Double Machine Learning for AI Data Augmentation\\in Generalized Linear Models}
 
-% Anonymous submission - authors will be added in camera-ready
 \icmlsetsymbol{equal}{*}
 
 \begin{icmlauthorlist}
-\icmlauthor{Anonymous Author(s)}{}
+\icmlauthor{Cheng Lu}{wustl}
+\icmlauthor{Mengxin Wang}{utd}
+\icmlauthor{Dennis J. Zhang}{wustl}
+\icmlauthor{Heng Zhang}{asu}
 \end{icmlauthorlist}
+
+\icmlaffiliation{wustl}{Olin Business School, Washington University in St. Louis, St. Louis, MO, USA}
+\icmlaffiliation{utd}{Naveen Jindal School of Management, University of Texas at Dallas, Richardson, TX, USA}
+\icmlaffiliation{asu}{W.P. Carey School of Business, Arizona State University, Tempe, AZ, USA}
+
+\icmlcorrespondingauthor{Cheng Lu}{cheng.lu@wustl.edu}
+\icmlcorrespondingauthor{Mengxin Wang}{mengxin.wang@utdallas.edu}
+\icmlcorrespondingauthor{Dennis J. Zhang}{denniszhang@wustl.edu}
+\icmlcorrespondingauthor{Heng Zhang}{hengzhang24@asu.edu}
 
 \vskip 0.3in
 ]
@@ -248,7 +259,7 @@ where $\mathbf{\Sigma}^P = \frac{1}{\rho}\mathbf{J}^{-1}\E[\nabla_\bbeta \ell(\b
 
 Moreover, $\mathbf{\Sigma}^P \succeq \mathbf{\Sigma}^{\text{DML}}$, with strict inequality when $\rho < 1$ and:
 \begin{equation}
-    \E\left[\bX^\top(\nabla b(\bX\bbeta^*) - \E[\by|\bX, \bz])(\nabla b(\bX\bbeta^*) - \E[\by|\bX, \bz])^\top \bX\right] \succ 0
+    \E\left[\bX^\top(\nabla b(\bX\bbeta^*) - \E[\by|\bX, \bz])(\cdot)^\top \bX\right] \succ 0
 \end{equation}
 \end{corollary}
 
@@ -281,31 +292,6 @@ PPI assumes $\bz \approx \by$ and constructs estimates by correcting AI predicti
 
 \subsection{Main Results}
 
-\begin{table}[t]
-\caption{Full benchmark comparison (MAPE \% -- lower is better)}
-\label{tab:main}
-\vskip 0.1in
-\begin{center}
-\begin{small}
-\begin{sc}
-\begin{tabular}{lcccccc}
-\toprule
-Method & $n$=50 & $n$=100 & $n$=150 & $n$=200 & Avg & Rank \\
-\midrule
-\textbf{DML} & \textbf{16.4} & \textbf{17.3} & \textbf{16.3} & \textbf{17.1} & \textbf{16.8} & \textbf{1st} \\
-DML-2 & 16.5 & 17.3 & 16.6 & 17.3 & 16.9 & 2nd \\
-AAE & 21.2 & 17.3 & 16.3 & 16.3 & 17.8 & 3rd \\
-Primary & 49.2 & 29.3 & 22.3 & 20.9 & 30.4 & 4th \\
-Naive & 54.8 & 52.3 & 49.9 & 47.2 & 51.1 & 5th \\
-PPI & 565.3 & 379.3 & 325.4 & 306.0 & 394.0 & 6th \\
-\bottomrule
-\end{tabular}
-\end{sc}
-\end{small}
-\end{center}
-\vskip -0.1in
-\end{table}
-
 Table~\ref{tab:main} presents the main results with $n_{\text{aug}} = 1000$ augmented observations. Key findings:
 
 \textbf{DML achieves state-of-the-art performance.} Our method achieves 16.8\% average MAPE, outperforming all baselines. The improvement over AAE (17.8\%) demonstrates the value of nonparametric $g$-function estimation. The dramatic improvement over PPI (394.0\%) confirms that treating AI predictions as features rather than outcome proxies is essential when AI accuracy is moderate.
@@ -313,6 +299,29 @@ Table~\ref{tab:main} presents the main results with $n_{\text{aug}} = 1000$ augm
 \textbf{Augmented data substantially improves efficiency.} Comparing DML (16.8\%) to Primary Only (30.4\%) shows that AI-augmented data reduces MAPE by 13.6 percentage points, validating our theoretical dominance result.
 
 \textbf{Naive pooling introduces severe bias.} The Naive method (51.1\%) performs poorly because it treats AI labels as equivalent to human labels, introducing systematic bias.
+
+\begin{table}[t]
+\caption{Full benchmark comparison (MAPE \% -- lower is better). Results with $n_{\text{aug}}=1000$ augmented observations.}
+\label{tab:main}
+\vskip 0.1in
+\begin{center}
+\begin{small}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+Method & $n$=50 & $n$=100 & $n$=200 & Avg \\
+\midrule
+\textbf{DML} & \textbf{16.4} & \textbf{17.3} & \textbf{17.1} & \textbf{16.8} \\
+DML-2 & 16.5 & 17.3 & 17.3 & 16.9 \\
+AAE & 21.2 & 17.3 & 16.3 & 17.8 \\
+Primary & 49.2 & 29.3 & 20.9 & 30.4 \\
+Naive & 54.8 & 52.3 & 47.2 & 51.1 \\
+PPI & 565.3 & 379.3 & 306.0 & 394.0 \\
+\bottomrule
+\end{tabular}
+\end{small}
+\end{center}
+\vskip -0.1in
+\end{table}
 
 \subsection{Improvement Summary}
 
@@ -322,14 +331,14 @@ Table~\ref{tab:main} presents the main results with $n_{\text{aug}} = 1000$ augm
 \vskip 0.1in
 \begin{center}
 \begin{small}
-\begin{tabular}{lcc}
+\begin{tabular}{@{}lcc@{}}
 \toprule
-Comparison & Improvement & Notes \\
+Comparison & Improv. & Notes \\
 \midrule
-DML vs Primary Only & +13.6\% & Leverages augmented data \\
+DML vs Primary & +13.6\% & Augmented data \\
 DML vs Naive & +34.3\% & Avoids AI bias \\
-DML vs AAE & +1.0\% & Nonparametric $g$ \\
-DML vs PPI & +377.2\% & Features, not proxies \\
+DML vs AAE & +1.0\% & Nonparam. $g$ \\
+DML vs PPI & +377.2\% & Features not proxies \\
 \bottomrule
 \end{tabular}
 \end{small}
@@ -339,15 +348,17 @@ DML vs PPI & +377.2\% & Features, not proxies \\
 
 \subsection{DML Variant Comparison}
 
+Table~\ref{tab:dml_variants} shows that DML and DML-2 are essentially equivalent (0.17\% difference), confirming both implementations satisfy DML theoretical requirements.
+
 \begin{table}[t]
 \caption{DML vs DML-2 comparison (30 trials)}
 \label{tab:dml_variants}
 \vskip 0.1in
 \begin{center}
 \begin{small}
-\begin{tabular}{lccc}
+\begin{tabular}{@{}lccc@{}}
 \toprule
-$n_{\text{real}}$ & DML & DML-2 & Difference \\
+$n_{\text{real}}$ & DML & DML-2 & Diff. \\
 \midrule
 50 & 16.43\% & 16.49\% & -0.06\% \\
 100 & 17.31\% & 17.34\% & -0.03\% \\
@@ -361,8 +372,6 @@ $n_{\text{real}}$ & DML & DML-2 & Difference \\
 \end{center}
 \vskip -0.1in
 \end{table}
-
-Table~\ref{tab:dml_variants} shows that DML and DML-2 are essentially equivalent (0.17\% difference), confirming both implementations satisfy DML theoretical requirements.
 
 \subsection{Why PPI Fails}
 
@@ -406,31 +415,168 @@ The key insight is that the relationship between AI predictions and outcomes can
 
 The proof proceeds in three steps. First, we establish that the score function is valid and Neyman-orthogonal. Second, we prove consistency. Third, we derive the asymptotic expansion.
 
-\textbf{Step 1: Score Function Validity.} Define $\btau(\Xi; e, g) := \bX^\top[g(\bX, \bz) - \frac{w}{e(\bX, \bz)}(g(\bX, \bz) - \by)]$. Then:
+\subsection{Step 1: Score Function Validity}
+
+Define $\btau(\Xi; e, g) := \bX^\top[g(\bX, \bz) - \frac{w}{e(\bX, \bz)}(g(\bX, \bz) - \by)]$. Then:
 \begin{align}
     P\btau(e^*, g^*) &= \E\left[\bX^\top\left(g^*(\bX, \bz) - \frac{w}{e^*(\bX, \bz)}(g^*(\bX, \bz) - \by)\right)\right] \nonumber \\
     &= \E[\bX^\top \E[\by | \bX, \bz]] = \E[\bX^\top \by]
 \end{align}
 where we use $\E[w | \bX, \bz] = e^*(\bX, \bz)$ and $\E[\by | \bX, \bz] = g^*(\bX, \bz)$.
 
-\textbf{Step 2: Neyman Orthogonality.} We show $\sqrt{n}(\mathbb{P}_n\btau(\hat{e}, \hat{g}) - \mathbb{P}_n\btau(e^*, g^*)) = o_P(1)$ by decomposing into three terms and showing each is $o_P(1)$ using Assumption~\ref{ass:ml_rate}.
-
-\textbf{Step 3: Asymptotic Expansion.} By consistency of $\hat{\bbeta}$ and Taylor expansion:
+Therefore,
 \begin{equation}
-    \sqrt{n}(\hat{\bbeta} - \bbeta^*) = \mathbf{J}^{-1}\sqrt{n}\mathbb{P}_n\bpsi(\bbeta^*) + o_P(1)
+P\bpsi(e^*, g^*; \bbeta^*) = \E[\bX^\top b(\bX\bbeta) - \btau(\Xi; e^*, g^*)] = \E[\bX^\top b(\bX\bbeta) - \bX^\top \by] = 0
 \end{equation}
-The CLT yields the stated result. \hfill $\square$
+by the first-order condition~\eqref{eq:foc}. This proves that the score function is valid.
+
+\subsection{Step 2: Neyman Orthogonality}
+
+We show $\sqrt{n}(\mathbb{P}_n\btau(\hat{e}, \hat{g}) - \mathbb{P}_n\btau(e^*, g^*)) = o_P(1)$ by decomposing into three terms:
+\begin{align}
+&\sqrt{n} (\mathbb{P}_n\btau(\hat{e}, \hat{g}) - \mathbb{P}_n\btau(e^*, g^*)) \nonumber \\
+&= \underbrace{\sqrt{n}\mathbb{P}_n\left[\left(1 - \frac{w}{e^*}\right) \bX^\top(\hat{g} - g^*)\right]}_{(I)} \nonumber \\
+&\quad + \underbrace{\sqrt{n}\mathbb{P}_n\left[\frac{w(\hat{e} - e^*)}{\hat{e}e^*} \bX^\top(g^* - \by)\right]}_{(II)} \nonumber \\
+&\quad + \underbrace{\sqrt{n}\mathbb{P}_n\left[\frac{w(\hat{e} - e^*)}{\hat{e}e^*} \bX^\top(\hat{g} - g^*)\right]}_{(III)}
+\end{align}
+
+\textbf{Term (I):} Note that $\E[(1 - w/e^*(\bX, \bz)) \bX^\top(\hat{g}(\bX, \bz) - g^*(\bX, \bz)) | I^c] = 0$ since $\E[w | \bX, \bz] = e^*(\bX, \bz)$. By the Markov inequality and Assumption~\ref{ass:ml_rate}, term (I) is $o_P(1)$.
+
+\textbf{Term (II):} Similarly, $\E[w(\hat{e} - e^*)\bX^\top(g^* - \by)/(\hat{e}e^*) | I^c] = 0$ since $\E[g^*(\bX, \bz) - \by | \bX, \bz] = 0$. By Assumption~\ref{ass:ml_rate}, term (II) is $o_P(1)$.
+
+\textbf{Term (III):} By Cauchy-Schwarz and Assumption~\ref{ass:ml_rate}:
+\begin{equation}
+\E[|\hat{e} - e^*| \|\hat{g} - g^*\|] \leq \|\hat{e} - e^*\|_{P,2} \|\hat{g} - g^*\|_{P,2} = o(n^{-1/2})
+\end{equation}
+Therefore term (III) is $o_P(1)$.
+
+\subsection{Step 3: Asymptotic Expansion}
+
+By the results above, for any sequence $\{\check{\bbeta}_n\}$ satisfying $\mathbb{P}_n\bpsi(e^*, g^*; \check{\bbeta}_n) = 0$, we have:
+\begin{equation}
+\sqrt{n}\mathbb{P}_n\bpsi(\hat{e}, \hat{g}; \check{\bbeta}_n) = o_P(1)
+\end{equation}
+
+\textbf{Consistency.} Define $\bar{\ell}(\Xi; e, g; \bbeta) := b(\bX\bbeta) - [g(\bX, \bz) + \frac{w}{e(\bX, \bz)}(g(\bX, \bz) - \by)]^\top \bX\bbeta$. Since $\nabla_\bbeta \bar{\ell} = \bpsi$ and $\nabla^2_\bbeta \bar{\ell} = \bX^\top \nabla^2_\theta b(\bX\bbeta) \bX \succeq 0$, the function $\bar{\ell}$ is convex. By standard arguments (cf.\ \citet{newey1994large}), $\hat{\bbeta} \to_P \bbeta^*$.
+
+\textbf{Asymptotic Normality.} By Taylor expansion around $\bbeta^*$:
+\begin{align}
+\sqrt{n}(P\bpsi(\hat{\bbeta}) - P\bpsi(\bbeta^*)) &= \sqrt{n}\mathbf{J}(\hat{\bbeta} - \bbeta^*) + o_P(\|\hat{\bbeta} - \bbeta^*\|)
+\end{align}
+
+Since $\{\bpsi(\cdot; \bbeta) : \bbeta \in B(\bbeta^*, \epsilon)\}$ forms a Donsker class (by Lipschitz continuity), we have $\mathbb{G}_n\bpsi(\hat{\bbeta}) - \mathbb{G}_n\bpsi(\bbeta^*) \to_P 0$. Therefore:
+\begin{equation}
+\sqrt{n}(\hat{\bbeta} - \bbeta^*) = \mathbf{J}^{-1}\sqrt{n}\mathbb{P}_n\bpsi(\bbeta^*) + o_P(1)
+\end{equation}
+
+The central limit theorem yields $\sqrt{n}\mathbb{P}_n\bpsi(\bbeta^*) \rightsquigarrow N(0, \E[\bpsi\bpsi^\top])$, completing the proof. \hfill $\square$
 
 \section{Proof of Corollary~\ref{cor:dominance}}
 \label{app:proof_dominance}
 
-When $e(\bX, \bz) = \rho$ is constant and $w \perp (\bX, \by, \bz)$:
-\begin{align}
-    \mathbf{\Sigma}^P &= \frac{1}{\rho}\mathbf{J}^{-1}\E[\zeta\zeta^\top]\mathbf{J}^{-1} + \frac{1}{\rho}\mathbf{J}^{-1}\E[\pi\pi^\top]\mathbf{J}^{-1} \\
-    \mathbf{\Sigma}^{\text{DML}} &= \mathbf{J}^{-1}\E[\zeta\zeta^\top]\mathbf{J}^{-1} + \frac{1}{\rho}\mathbf{J}^{-1}\E[\pi\pi^\top]\mathbf{J}^{-1}
-\end{align}
-where $\zeta := \bX^\top(\nabla b(\bX\bbeta^*) - g^*(\bX, \bz))$ and $\pi := \bX^\top(g^*(\bX, \bz) - \by)$.
+When $e(\bX, \bz) = \rho$ is constant and $w \perp (\bX, \by, \bz)$, the primary-only estimator $\hat{\bbeta}^P$ solves $\sum_{i \in \mathcal{D}^P} \nabla_\bbeta \ell(\bX_i, \by_i; \bbeta) = 0$, which is equivalent to $\sum_{i=1}^n w_i \nabla_\bbeta \ell(\bX_i, \by_i; \bbeta) = 0$.
 
-Since $\rho < 1$, we have $\frac{1}{\rho} > 1$, so $\mathbf{\Sigma}^P - \mathbf{\Sigma}^{\text{DML}} = (\frac{1}{\rho} - 1)\mathbf{J}^{-1}\E[\zeta\zeta^\top]\mathbf{J}^{-1} \succeq 0$. \hfill $\square$
+\subsection{Variance Decomposition}
+
+Note that $\nabla_\bbeta \ell(\bX, \by; \bbeta^*) = \bX^\top(\nabla_\theta b(\bX\bbeta^*) - \by)$. Define:
+\begin{align}
+\zeta(\bX, \bz) &:= \bX^\top(\nabla b(\bX\bbeta^*) - g^*(\bX, \bz)) \\
+\pi(\bX, \by, \bz) &:= \bX^\top(g^*(\bX, \bz) - \by)
+\end{align}
+
+Then $\nabla_\bbeta \ell = \zeta + \pi$ and $\E[\pi | \bX, \bz] = 0$.
+
+\subsection{Primary-Only Variance}
+
+By standard arguments:
+\begin{align}
+\mathbf{\Sigma}^P &= \frac{1}{\rho}\mathbf{J}^{-1}\E[(\zeta + \pi)(\zeta + \pi)^\top]\mathbf{J}^{-1} \nonumber \\
+&= \frac{1}{\rho}\mathbf{J}^{-1}\E[\zeta\zeta^\top]\mathbf{J}^{-1} + \frac{1}{\rho}\mathbf{J}^{-1}\E[\pi\pi^\top]\mathbf{J}^{-1}
+\end{align}
+where we use $\E[\zeta\pi^\top] = \E[\E[\zeta\pi^\top | \bX, \bz]] = \E[\zeta \E[\pi^\top | \bX, \bz]] = 0$.
+
+\subsection{DML Variance}
+
+The DML score is $\bpsi = \zeta + \frac{w}{\rho}\pi$. Therefore:
+\begin{align}
+\mathbf{\Sigma}^{\text{DML}} &= \mathbf{J}^{-1}\E[(\zeta + \frac{w}{\rho}\pi)(\zeta + \frac{w}{\rho}\pi)^\top]\mathbf{J}^{-1} \nonumber \\
+&= \mathbf{J}^{-1}\E[\zeta\zeta^\top]\mathbf{J}^{-1} + \frac{1}{\rho}\mathbf{J}^{-1}\E[\pi\pi^\top]\mathbf{J}^{-1}
+\end{align}
+where we use $\E[w] = \rho$ and independence.
+
+\subsection{Dominance Result}
+
+Comparing the two expressions:
+\begin{equation}
+\mathbf{\Sigma}^P - \mathbf{\Sigma}^{\text{DML}} = \left(\frac{1}{\rho} - 1\right)\mathbf{J}^{-1}\E[\zeta\zeta^\top]\mathbf{J}^{-1}
+\end{equation}
+
+Since $\rho < 1$, we have $\frac{1}{\rho} - 1 > 0$. The matrix $\E[\zeta\zeta^\top]$ is positive semi-definite, and strictly positive definite when $\zeta$ is not almost surely zero. This occurs when $g^*(\bX, \bz) \neq \nabla b(\bX\bbeta^*)$ with positive probability, i.e., when AI predictions are informative. \hfill $\square$
+
+\section{Supporting Lemmas}
+\label{app:lemmas}
+
+\begin{lemma}[Score Function and Neyman Orthogonality]
+\label{lem:score}
+It holds that $P\bpsi(e^*, g^*; \bbeta^*) = 0$ and $\mathbb{P}_n\btau(\hat{e}, \hat{g}) - \mathbb{P}_n\btau(e^*, g^*) = o_P(n^{-1/2})$.
+\end{lemma}
+
+\begin{proof}
+See Step 1 and Step 2 in Appendix~\ref{app:proof_normality}.
+\end{proof}
+
+\begin{lemma}[Rates of Empirical Scores]
+\label{lem:rates}
+It holds that $\|\mathbb{P}_n\bpsi(e^*, g^*; \hat{\bbeta})\|, \inf_{\bbeta \in \mathcal{B}} \|\mathbb{P}_n\bpsi(\hat{e}, \hat{g}; \bbeta)\| = o_P(1/\sqrt{n})$.
+\end{lemma}
+
+\begin{proof}
+By Lemma~\ref{lem:score}, there exists a sequence $\{\check{\bbeta}_n\}$ with $\mathbb{P}_n\bpsi(e^*, g^*; \check{\bbeta}_n) = 0$ and $\check{\bbeta}_n \to_P \bbeta^*$. Then:
+\begin{align}
+\sqrt{n}\mathbb{P}_n\bpsi(\hat{e}, \hat{g}; \check{\bbeta}_n) &= \sqrt{n}\mathbb{P}_n\bpsi(e^*, g^*; \check{\bbeta}_n) \nonumber \\
+&\quad + \sqrt{n}(\mathbb{P}_n\btau(e^*, g^*) - \mathbb{P}_n\btau(\hat{e}, \hat{g})) \nonumber \\
+&= o_P(1)
+\end{align}
+The result follows.
+\end{proof}
+
+\begin{lemma}[Consistency]
+\label{lem:consistency}
+$\hat{\bbeta} \to_P \bbeta^*$.
+\end{lemma}
+
+\begin{proof}
+The loss function $P\bar{\ell}(e^*, g^*; \bbeta)$ is strictly convex with unique minimizer $\bbeta^*$. By uniform convergence $\mathbb{P}_n\bar{\ell}(e^*, g^*; \bbeta) \to_P P\bar{\ell}(e^*, g^*; \bbeta)$ and Theorem 2.7 of \citet{newey1994large}, the result follows.
+\end{proof}
+
+\section{Additional Experimental Details}
+\label{app:experiments}
+
+\subsection{Data Generation}
+
+The conjoint analysis data consists of choice tasks where each task presents two product alternatives. Each alternative is characterized by 11 attributes including price, brand, and various features. The ground truth parameters $\bbeta^* \in \R^{11}$ are known from a large-scale study with over 10,000 human responses.
+
+\subsection{AI Prediction Generation}
+
+We use GPT-4o to generate predictions for each choice task. The prompt describes the two alternatives and asks the model to predict which option a human respondent would choose. The model outputs:
+\begin{itemize}
+    \item $z = 1$: Predicts option 1
+    \item $z = 0$: Predicts option 2
+    \item $z = -1$: Abstains (uncertain)
+\end{itemize}
+
+The overall accuracy (excluding abstentions) is approximately 57\%.
+
+\subsection{Implementation Details}
+
+\textbf{G-Model.} We use stratified logistic regression with $C = 0.05$. For each value of $z \in \{-1, 0, 1\}$, we fit a separate logistic regression model on the primary data with that $z$ value.
+
+\textbf{Cross-Fitting.} We use $K = 5$ folds. For each fold, the g-model is trained on the remaining 4 folds of primary data, then used to predict on both the held-out fold and all augmented data.
+
+\textbf{Optimization.} The final GLM is fit using L-BFGS with the DML-adjusted targets.
+
+\subsection{Computational Resources}
+
+All experiments were run on a single machine with an Intel i7 processor and 32GB RAM. Each trial takes approximately 2 seconds.
 
 \end{document}

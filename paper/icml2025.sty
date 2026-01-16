@@ -98,13 +98,33 @@
   \par%
 }
 
-\newcommand{\icmlauthor}[2]{#1}
-\newcommand{\icmlaffiliation}[2]{\textsuperscript{#1}#2}
+% Author handling
+\newcounter{icmlauthor}
+\newcommand{\icmlauthor}[2]{%
+  \stepcounter{icmlauthor}%
+  \ifnum\value{icmlauthor}>1 \quad \fi%
+  #1\textsuperscript{#2}%
+}
+
+\newcommand{\icmlaffiliation}[2]{%
+  \expandafter\gdef\csname icml@affil@#1\endcsname{#2}%
+}
+
 \newcommand{\icmlsetsymbol}[2]{}
-\newcommand{\icmlcorrespondingauthor}[1]{}
+\newcommand{\icmlcorrespondingauthor}[2]{%
+  \expandafter\gdef\csname icml@email@#1\endcsname{#2}%
+}
 \newcommand{\icmlequalcontribution}{}
 
 \newcommand{\printAffiliationsAndNotice}[1][]{%
+  \vskip 0.05in%
+  {\small%
+    \textsuperscript{wustl}Olin Business School, Washington University in St. Louis \quad%
+    \textsuperscript{utd}Naveen Jindal School of Management, UT Dallas \quad%
+    \textsuperscript{asu}W.P. Carey School of Business, Arizona State University%
+  }%
+  \vskip 0.05in%
+  {\small Correspondence: \texttt{cheng.lu@wustl.edu}, \texttt{mengxin.wang@utdallas.edu}, \texttt{denniszhang@wustl.edu}, \texttt{hengzhang24@asu.edu}}%
   \vskip 0.1in%
   \if@accepted
     {\small\itshape Proceedings of the 42\textsuperscript{nd} International Conference on Machine Learning, Vancouver, Canada, PMLR 267, 2025. Copyright 2025 by the author(s).}%
