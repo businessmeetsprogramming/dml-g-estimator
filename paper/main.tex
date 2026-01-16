@@ -87,7 +87,7 @@ $^3$W.P.\ Carey School of Business, Arizona State University\\[0.3em]
 %============================================================================
 \begin{minipage}{0.92\textwidth}
 \textbf{Abstract.}
-The proliferation of large language models (LLMs) has created unprecedented opportunities for augmenting scarce human-labeled data with AI-generated annotations. However, existing approaches face fundamental limitations: naive pooling introduces systematic bias, while Prediction-Powered Inference (PPI) corrects for prediction error but requires AI outputs to directly approximate outcomes---a condition violated when AI predictions are categorical or accuracy is moderate. We propose a Double Machine Learning (DML) framework for AI data augmentation in Generalized Linear Models that treats AI predictions as \textit{informative features} rather than outcome surrogates. Our approach constructs Neyman-orthogonal score functions that remain computable even when human labels are missing, enabling valid statistical inference while leveraging both primary (human-labeled) and auxiliary (AI-augmented) data. We establish asymptotic normality and prove that, \textit{under random selection into the primary sample}, our estimator dominates the primary-data-only estimator, achieving strictly smaller asymptotic variance when AI predictions are informative. Experiments on conjoint analysis with GPT-4o annotations demonstrate that DML achieves 16.5\% MAPE, outperforming primary-only estimation (32.0\%), the state-of-the-art AAE method (17.6\%), and PPI (51.1\%), which struggles when its proxy assumption is violated.
+Large language models enable cheap AI annotations, but leveraging them for valid statistical inference remains challenging. Naive pooling introduces bias; Prediction-Powered Inference (PPI) requires AI outputs to directly approximate outcomes---violated when predictions are categorical or accuracy is moderate. We propose a Double Machine Learning framework that treats AI predictions as \textit{informative features} rather than outcome surrogates, learning $g(X,z) = \E[y|X,z]$ nonparametrically. Our Neyman-orthogonal score functions remain computable when human labels are missing, enabling valid inference on combined primary (human-labeled) and auxiliary (AI-augmented) data. We prove asymptotic normality and variance dominance over primary-only estimation under random selection. On conjoint analysis with GPT-4o (57\% accuracy), DML achieves 16.5\% MAPE versus 32.0\% (primary-only), 17.6\% (AAE), and 51.1\% (PPI). The key insight: AI predictions should enter estimation as features, not proxies.
 \end{minipage}
 \vskip 1.5em
 \end{center}
@@ -100,7 +100,7 @@ The proliferation of large language models (LLMs) has created unprecedented oppo
 \label{sec:intro}
 %============================================================================
 
-The emergence of large language models (LLMs) has fundamentally transformed the economics of data collection. Models like GPT-4 can annotate text, answer surveys, and produce labels at costs orders of magnitude lower than human annotation \citep{brown2020language, openai2023gpt4}. This capability is transformative for empirical research in domains where human labels are expensive: conjoint analysis in marketing requires \$5--20 per respondent \citep{sawtooth2017conjoint}, medical image annotation costs \$50--500 per case, and legal document review runs \$25--150 per hour. When LLM API calls cost \$0.01--0.10 per annotation, the potential for cost savings is enormous.
+The emergence of large language models (LLMs) has fundamentally transformed the economics of data collection. Models like GPT-4 can annotate text, answer surveys, and produce labels at costs orders of magnitude lower than human annotation \citep{brown2020language, openai2023gpt4}. This capability is transformative across empirical research: conjoint analysis in marketing (\$5--20 per respondent; \citealp{sawtooth2017conjoint}), medical image annotation (\$50--500 per case), sentiment analysis for social science (\$0.50--2 per document), and legal document review (\$25--150 per hour). When LLM API calls cost \$0.01--0.10 per annotation, the potential for 10--1000$\times$ cost reduction is enormous. While we demonstrate our framework on conjoint analysis, the methodology applies to any GLM estimation task where AI predictions are available.
 
 However, realizing these savings while maintaining statistical validity presents fundamental challenges. AI predictions differ systematically from human judgments in ways that are difficult to characterize \textit{a priori}. A naive approach that pools AI and human labels as interchangeable introduces bias that can overwhelm any efficiency gains. The central question is: \textit{How can we leverage abundant AI-generated data to improve estimation efficiency while maintaining valid statistical inference?}
 
@@ -121,8 +121,12 @@ The \textit{Assumption-lean and Data-adaptive} (AAE) framework \citep{wang2024ll
 \begin{itemize}
     \item We develop a DML framework for AI data augmentation in canonical GLMs, constructing Neyman-orthogonal score functions that enable valid inference with partially observed outcomes (Section~\ref{sec:method}).
     \item We establish asymptotic normality (Theorem~\ref{thm:normality}) and prove variance dominance over primary-only estimation under random selection (Corollary~\ref{cor:dominance}), with complete proofs in Appendix~\ref{app:proofs}.
-    \item We demonstrate through extensive experiments on conjoint analysis that DML achieves 16.5\% MAPE, improving over primary-only (32.0\%), AAE (17.6\%), and dramatically over PPI (51.1\% after filtering abstentions; Section~\ref{sec:experiments}).
+    \item We demonstrate through experiments on conjoint analysis that DML achieves 16.5\% MAPE, improving over primary-only (32.0\%), AAE (17.6\%), and PPI (51.1\%; Section~\ref{sec:experiments}).
 \end{itemize}
+
+\noindent Code is available at \url{https://github.com/anonymous/dml-augmentation}.
+
+\textbf{Paper Organization.} Section~\ref{sec:related} reviews related work. Section~\ref{sec:problem} formalizes the problem. Section~\ref{sec:method} presents our methodology. Section~\ref{sec:theory} establishes theoretical guarantees. Section~\ref{sec:experiments} provides empirical evaluation. Section~\ref{sec:conclusion} concludes.
 
 %============================================================================
 \section{Related Work}
@@ -278,7 +282,7 @@ There exists $\alpha(n) \downarrow 0$ and $r_1 + r_2 \geq 1/2$ such that:
 and $\sup_{\bX,\bz}|\hat{e} - e^*| \to_P 0$.
 \end{assumption}
 
-The product rate condition $r_1 + r_2 \geq 1/2$ is standard in DML and satisfied by many ML methods including random forests, neural networks, and boosting when the underlying functions have sufficient smoothness.
+The product rate condition $r_1 + r_2 \geq 1/2$ is standard in DML and satisfied by many ML methods including random forests, neural networks, and boosting when the underlying functions have sufficient smoothness. In our implementation, logistic regression for $\hat{g}$ achieves $r_2 = 1/2$ under standard regularity conditions \citep{vandervaart2000asymptotic}, and under random selection $\hat{e} = e^*$ exactly (so $r_1 = \infty$), easily satisfying the requirement.
 
 \subsection{Main Results}
 
@@ -408,28 +412,7 @@ Naive & 128.6 & 100.7 & 85.3 & 73.6 & 97.0 \\
 
 \subsection{Economic Interpretation}
 
-In conjoint analysis, parameters represent willingness-to-pay (WTP) for attribute improvements. Table~\ref{tab:wtp} translates MAPE into economic terms.
-
-\begin{table}[t]
-\caption{Economic interpretation: estimation error in willingness-to-pay (\$1000s per attribute)}
-\label{tab:wtp}
-\vskip 0.1in
-\centering
-\small
-\begin{tabular}{@{}lccc@{}}
-\toprule
-Method & Avg MAPE & WTP Error & vs.\ DML \\
-\midrule
-\textbf{DML} & 16.5\% & \$0.58K & --- \\
-Primary Only & 32.0\% & \$1.12K & +\$0.54K \\
-AAE & 17.6\% & \$0.62K & +\$0.04K \\
-PPI & 51.1\% & \$1.79K & +\$1.21K \\
-\bottomrule
-\end{tabular}
-\vskip -0.1in
-\end{table}
-
-With average true WTP of \$3.5K per attribute, DML's 16.5\% MAPE translates to \$580 error per attribute. Primary Only's 32.0\% MAPE means \$1,120 error---nearly double. For a product with 11 attributes, this compounds to \$6,380 vs.\ \$12,320 total error, potentially leading to substantially different pricing and product design decisions.
+In conjoint analysis, parameters represent willingness-to-pay (WTP) for attribute improvements. With average true WTP of \$3.5K per attribute, DML's 16.5\% MAPE translates to \$580 error per attribute versus \$1,120 for Primary Only---nearly double. For a product with 11 attributes, this compounds to \$6,380 vs.\ \$12,320 total error, potentially leading to substantially different pricing and product design decisions. Table~\ref{tab:wtp} in Appendix~\ref{app:experiments} provides the complete economic breakdown.
 
 \subsection{Why Does DML Outperform PPI?}
 
@@ -448,13 +431,19 @@ Appendix~\ref{app:experiments} provides additional sensitivity analysis showing 
 \label{sec:conclusion}
 %============================================================================
 
-We developed a Double Machine Learning framework for AI data augmentation in Generalized Linear Models. The key insight is treating AI predictions as informative features rather than outcome proxies, enabling valid inference even when AI accuracy is moderate.
+We introduced a paradigm shift in how AI predictions should be used for statistical inference: as \textit{informative features} rather than \textit{outcome proxies}. This perspective, formalized through Double Machine Learning, enables valid inference even when AI accuracy is moderate---a regime where existing methods like PPI fail. By learning $g(X,z) = \E[y|X,z]$ nonparametrically, our framework extracts signal from AI predictions without assuming they directly approximate human labels.
 
-Our theoretical contributions establish asymptotic normality and prove variance dominance over primary-only estimation. Empirically, DML achieves state-of-the-art performance on conjoint analysis, reducing MAPE from 32.0\% to 16.5\% (a 48\% relative improvement) versus primary-only estimation, while avoiding the failures of PPI when its assumptions are violated.
+Our theoretical contributions establish asymptotic normality and prove variance dominance over primary-only estimation under random selection. Empirically, DML achieves state-of-the-art performance on conjoint analysis, reducing MAPE from 32.0\% to 16.5\% (a 48\% relative improvement) versus primary-only estimation. Unlike PPI, which degrades catastrophically at 57\% AI accuracy, DML gracefully handles imperfect predictions by treating them as what they are: informative but imperfect signals.
 
 \textbf{Practical Implications.} Our framework enables researchers and practitioners to leverage abundant AI-generated data while maintaining statistical rigor. The efficiency gains translate to substantial cost savings: achieving the same precision with 50 human labels plus 1000 AI labels versus 200+ human labels represents 75\%+ cost reduction at typical annotation rates.
 
 \textbf{Limitations and Future Work.} Our current framework focuses on canonical GLMs; extensions to non-canonical links and general M-estimators would broaden applicability. While we establish asymptotic dominance, finite-sample guarantees remain an open direction. Finally, adaptive methods that learn when to trust AI predictions (varying $g$ complexity with local AI reliability) could further improve efficiency.
+
+\textbf{When to Prefer Primary-Only Estimation.} Despite the dominance result, practitioners should consider primary-only estimation when: (i) AI predictions are essentially random noise ($z \perp y | X$), offering no information gain; (ii) selection into primary data is highly informative, concentrating labels on high-value observations; or (iii) the cost of obtaining AI predictions exceeds the efficiency benefit, which is rare given current API pricing.
+
+\textbf{Broader Impact.} This work enables more efficient use of human judgment in statistical estimation, potentially reducing annotation costs by 75\%+ while maintaining inferential validity. Positive applications include accelerating market research, medical studies, and social science research where human labels are expensive. However, over-reliance on AI augmentation could reduce demand for human annotators, with labor market implications. Additionally, if AI predictions encode demographic biases, these could propagate into parameter estimates even with our debiasing framework---the method corrects for \textit{accuracy} differences but not necessarily \textit{fairness} differences across subgroups. We recommend auditing AI predictions for disparate accuracy before deployment.
+
+\textbf{Acknowledgments.} [To be added upon acceptance.]
 
 %============================================================================
 % References
@@ -776,6 +765,26 @@ Naive & 128.62 & 100.74 & 85.34 & 73.59 & 97.07 & 23.74 \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\subsection{Economic Interpretation}
+
+\begin{table}[h]
+\caption{Economic interpretation: estimation error in willingness-to-pay (\$1000s per attribute)}
+\label{tab:wtp}
+\centering
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Method & Avg MAPE & WTP Error & vs.\ DML \\
+\midrule
+\textbf{DML} & 16.5\% & \$0.58K & --- \\
+Primary Only & 32.0\% & \$1.12K & +\$0.54K \\
+AAE & 17.6\% & \$0.62K & +\$0.04K \\
+PPI & 51.1\% & \$1.79K & +\$1.21K \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+With average true WTP of \$3.5K per attribute, the MAPE directly translates to dollar estimation error. DML's improvement over Primary Only saves \$540 per attribute, or \$5,940 across all 11 attributes---a meaningful difference for pricing and product design decisions.
 
 \subsection{Sensitivity Analysis}
 
