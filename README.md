@@ -13,38 +13,38 @@ Implementation of the Double Machine Learning (DML) estimator from:
 
 | Method | n=50 | n=100 | n=150 | n=200 | **Avg** | **Rank** |
 |--------|------|-------|-------|-------|---------|----------|
-| **DML** | **16.4** | **17.3** | **16.3** | **17.1** | **16.8** | **1st** |
-| **DML-2** | **16.5** | **17.3** | **16.6** | **17.3** | **16.9** | **2nd** |
-| AAE | 21.2 | 17.3 | 16.3 | 16.3 | 17.8 | 3rd |
-| Primary Only | 49.2 | 29.3 | 22.3 | 20.9 | 30.4 | 4th |
-| Naive | 54.8 | 52.3 | 49.9 | 47.2 | 51.1 | 5th |
-| PPI | 565.3 | 379.3 | 325.4 | 306.0 | 394.0 | 6th |
+| **DML** | **17.4** | **16.8** | **16.3** | **15.5** | **16.5** | **1st** |
+| **DML-2** | **17.6** | **16.9** | **16.5** | **15.9** | **16.7** | **2nd** |
+| AAE | 20.9 | 17.0 | 16.4 | 16.2 | 17.6 | 3rd |
+| Primary Only | 55.6 | 29.8 | 22.7 | 19.9 | 32.0 | 4th |
+| PPI | 93.3 | 48.5 | 34.0 | 28.8 | 51.1 | 5th |
+| Naive | 128.6 | 100.7 | 85.3 | 73.6 | 97.0 | 6th |
 
-*Results with n_aug=1000. DML/DML-2/Primary: 30 trials. AAE/Naive/PPI: 20 trials. PPI excludes z=-1 abstentions.*
+*All methods: 30 trials with n_aug=1000, using identical sample paths per trial. PPI excludes z=-1 abstentions.*
 
-**Note on PPI:** Prediction-Powered Inference ([Angelopoulos et al. 2023](https://arxiv.org/abs/2301.09633)) assumes AI predictions are direct proxies for y. In this setting, AI accuracy is only 57%, so PPI struggles. DML instead learns g(X,z) = E[y|X,z], using z as a feature rather than assuming z ≈ y.
+**Note on PPI:** Prediction-Powered Inference ([Angelopoulos et al. 2023](https://arxiv.org/abs/2301.09633)) assumes AI predictions are direct proxies for y. In this setting, AI accuracy is only 57%, so PPI underperforms. DML instead learns g(X,z) = E[y|X,z], using z as a feature rather than assuming z ≈ y.
 
 ### Improvement Summary
 
 | Comparison | Improvement | Notes |
 |------------|-------------|-------|
-| DML vs Primary Only | **+13.6%** | Leverages augmented data effectively |
-| DML vs Naive | **+34.3%** | Doesn't blindly trust AI labels |
-| DML vs AAE | **+1.0%** | Cross-fitting + debiasing correction |
-| DML vs DML-2 | **+0.1%** | Essentially equivalent |
-| DML vs PPI | **+374.2%** | PPI not designed for GLM augmentation |
+| DML vs Primary Only | **+15.5%** | Leverages augmented data effectively |
+| DML vs Naive | **+80.5%** | Doesn't blindly trust AI labels |
+| DML vs AAE | **+1.1%** | Cross-fitting + debiasing correction |
+| DML vs DML-2 | **+0.2%** | Essentially equivalent |
+| DML vs PPI | **+34.6%** | PPI assumes z ≈ y, DML learns g(X,z) |
 
 ### DML vs DML-2 Comparison (30 trials)
 
 | n_real | DML | DML-2 | Difference |
 |--------|-----|-------|------------|
-| 50 | 16.43% | 16.49% | -0.06% |
-| 100 | 17.31% | 17.34% | -0.03% |
-| 150 | 16.25% | 16.60% | -0.35% |
-| 200 | 17.07% | 17.29% | -0.22% |
-| **Avg** | **16.77%** | **16.93%** | **-0.17%** |
+| 50 | 17.44% | 17.56% | -0.12% |
+| 100 | 16.81% | 16.93% | -0.12% |
+| 150 | 16.25% | 16.46% | -0.21% |
+| 200 | 15.55% | 15.94% | -0.39% |
+| **Avg** | **16.51%** | **16.72%** | **-0.21%** |
 
-**Conclusion:** DML and DML-2 are essentially equivalent (only 0.17% difference), confirming that both implementations are theoretically sound.
+**Conclusion:** DML and DML-2 are essentially equivalent (only 0.21% difference), confirming that both implementations are theoretically sound.
 
 ---
 
@@ -198,7 +198,7 @@ Both satisfy the key DML requirements:
 1. **Neyman orthogonality** of the score function
 2. **Cross-fitting** for nuisance parameter g
 
-The empirical difference is only **0.17%** (30 trials), confirming asymptotic equivalence.
+The empirical difference is only **0.21%** (30 trials), confirming asymptotic equivalence.
 
 ---
 
@@ -350,7 +350,7 @@ pip install ppi-python
 
 1. **Use `dml.py`** - it contains everything you need (DML, DML-2, AAE, Naive, Primary, PPI)
 2. **DML ranks 1st** - beats all benchmarks (AAE, Primary Only, Naive, PPI)
-3. **DML ≈ DML-2** - both are valid (0.17% difference), use whichever you prefer
+3. **DML ≈ DML-2** - both are valid (0.21% difference), use whichever you prefer
 4. **Constant e works** - no need for complex propensity modeling
 5. **G-model matters** - use well-regularized Logistic Regression (C=0.05)
 6. **Cross-fitting is key** - ensures unbiased nuisance estimation
@@ -359,9 +359,9 @@ pip install ppi-python
 
 | Rank | Method | Avg MAPE | vs DML |
 |------|--------|----------|--------|
-| 1st | **DML** | **16.8%** | — |
-| 2nd | DML-2 | 16.9% | +0.1% |
-| 3rd | AAE | 17.8% | +1.0% |
-| 4th | Primary Only | 30.4% | +13.6% |
-| 5th | Naive | 51.1% | +34.3% |
-| 6th | PPI | 391.0% | +374.2% |
+| 1st | **DML** | **16.5%** | — |
+| 2nd | DML-2 | 16.7% | +0.2% |
+| 3rd | AAE | 17.6% | +1.1% |
+| 4th | Primary Only | 32.0% | +15.5% |
+| 5th | PPI | 51.1% | +34.6% |
+| 6th | Naive | 97.0% | +80.5% |
