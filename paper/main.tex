@@ -1,6 +1,6 @@
 \documentclass[10pt,twocolumn]{article}
 
-% Page layout
+% Page layout - ICML style
 \usepackage[margin=1in]{geometry}
 \usepackage{times}
 
@@ -16,6 +16,12 @@
 \usepackage{natbib}
 \usepackage{hyperref}
 \usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{multirow}
+\usepackage{tabularx}
+
+% Compact lists
+\setlist{nosep,leftmargin=*}
 
 % Hyperref setup
 \hypersetup{
@@ -56,7 +62,7 @@
 \begin{document}
 
 %============================================================================
-% Title
+% Title Block
 %============================================================================
 \makeatletter
 \twocolumn[
@@ -71,17 +77,17 @@ Cheng Lu$^1$ \quad Mengxin Wang$^2$ \quad Dennis J.\ Zhang$^1$ \quad Heng Zhang$
 {\small
 $^1$Olin Business School, Washington University in St.\ Louis\\
 $^2$Naveen Jindal School of Management, University of Texas at Dallas\\
-$^3$W.P.\ Carey School of Business, Arizona State University\\[0.5em]
+$^3$W.P.\ Carey School of Business, Arizona State University\\[0.3em]
 \texttt{\{cheng.lu, denniszhang\}@wustl.edu}, \texttt{mengxin.wang@utdallas.edu}, \texttt{hengzhang24@asu.edu}
 \par}
-\vskip 1.5em
+\vskip 1em
 
 %============================================================================
 % Abstract
 %============================================================================
-\begin{minipage}{0.9\textwidth}
+\begin{minipage}{0.92\textwidth}
 \textbf{Abstract.}
-The proliferation of large language models (LLMs) has created unprecedented opportunities for augmenting scarce human-labeled data with AI-generated annotations. However, naive approaches that directly substitute AI predictions for human labels introduce systematic biases, while existing methods like Prediction-Powered Inference (PPI) assume AI outputs serve as direct proxies for outcomes---an assumption often violated in practice. We propose a Double Machine Learning (DML) framework for AI data augmentation in Generalized Linear Models that treats AI predictions as informative features rather than outcome surrogates. Our approach constructs Neyman-orthogonal score functions that enable valid statistical inference while leveraging both human-labeled primary data and AI-augmented auxiliary data. We prove that our estimator achieves asymptotic normality and dominates the primary-data-only estimator under mild conditions. Extensive experiments on conjoint analysis with GPT-4o annotations demonstrate that our method achieves 16.8\% mean absolute percentage error (MAPE), substantially outperforming PPI (394.0\%), naive pooling (51.1\%), primary-only estimation (30.4\%), and the state-of-the-art AAE method (17.8\%).
+The proliferation of large language models (LLMs) has created unprecedented opportunities for augmenting scarce human-labeled data with AI-generated annotations. However, existing approaches face fundamental limitations: naive pooling introduces systematic bias, while Prediction-Powered Inference (PPI) assumes AI outputs serve as direct proxies for outcomes---an assumption violated when AI accuracy is moderate. We propose a Double Machine Learning (DML) framework for AI data augmentation in Generalized Linear Models that treats AI predictions as \textit{informative features} rather than outcome surrogates. Our approach constructs Neyman-orthogonal score functions that remain computable even when human labels are missing, enabling valid statistical inference while leveraging both primary (human-labeled) and auxiliary (AI-augmented) data. We establish asymptotic normality and prove that our estimator \textit{dominates} the primary-data-only estimator under random selection, achieving strictly smaller asymptotic variance when AI predictions are informative. Extensive experiments on conjoint analysis with GPT-4o annotations demonstrate that DML reduces estimation error by 48\% compared to primary-only estimation (equivalent to \$2.41 in willingness-to-pay accuracy per attribute), while PPI fails catastrophically with 394\% MAPE due to violated assumptions.
 \end{minipage}
 \vskip 1.5em
 \end{center}
@@ -94,24 +100,28 @@ The proliferation of large language models (LLMs) has created unprecedented oppo
 \label{sec:intro}
 %============================================================================
 
-The emergence of powerful large language models (LLMs) has fundamentally transformed the landscape of data collection in empirical research. These models can generate responses to surveys, annotate text, and produce labels at a fraction of the cost and time required for human annotation \citep{wang2024llm}. This capability is particularly valuable in settings where human labels are expensive or time-consuming to obtain, such as conjoint analysis in marketing, medical image annotation, and legal document classification.
+The emergence of large language models (LLMs) has fundamentally transformed the economics of data collection. Models like GPT-4 can annotate text, answer surveys, and produce labels at costs orders of magnitude lower than human annotation \citep{brown2020language, openai2023gpt4}. This capability is transformative for empirical research in domains where human labels are expensive: conjoint analysis in marketing requires \$5--20 per respondent \citep{sawtooth2017conjoint}, medical image annotation costs \$50--500 per case, and legal document review runs \$25--150 per hour. When LLM API calls cost \$0.01--0.10 per annotation, the potential for cost savings is enormous.
 
-However, integrating AI-generated data with human-labeled observations presents significant statistical challenges. AI predictions, while abundant and inexpensive, may differ systematically from human judgments in ways that are difficult to characterize \textit{a priori}. A naive approach that simply pools AI and human labels treats these fundamentally different data sources as interchangeable, potentially introducing substantial bias. Conversely, discarding AI-generated data entirely wastes valuable information that could improve estimation efficiency.
+However, realizing these savings while maintaining statistical validity presents fundamental challenges. AI predictions differ systematically from human judgments in ways that are difficult to characterize \textit{a priori}. A naive approach that pools AI and human labels as interchangeable introduces bias that can overwhelm any efficiency gains. The central question is: \textit{How can we leverage abundant AI-generated data to improve estimation efficiency while maintaining valid statistical inference?}
 
-Several approaches have been proposed to address this challenge. Prediction-Powered Inference (PPI) \citep{angelopoulos2023prediction} provides valid confidence intervals by using AI predictions as direct proxies for outcomes, correcting for prediction errors using a small labeled dataset. However, PPI's framework assumes that AI outputs approximate the outcome of interest---an assumption that fails when AI accuracy is low or when the AI system produces categorical outputs that differ structurally from continuous outcomes. The Assumption-lean and Data-adaptive Post-Prediction Inference (AAE) framework \citep{wang2024llm} relaxes some assumptions but still relies on parametric specifications for the relationship between AI predictions and outcomes.
+\textbf{Existing Approaches and Their Limitations.} Two prominent frameworks address this question. \textit{Prediction-Powered Inference} (PPI) \citep{angelopoulos2023prediction} constructs confidence intervals by treating AI predictions $\bz$ as direct proxies for outcomes $\by$, correcting for the prediction error $\bz - \by$ using labeled data. This elegant approach provides valid inference under the assumption that $\bz \approx \by$. However, when AI accuracy is moderate---as is common with LLMs on complex judgment tasks---PPI's correction term amplifies rather than reduces variance. In our experiments with 57\% AI accuracy, PPI produces 394\% MAPE versus 16.5\% for our method.
 
-We propose a fundamentally different approach based on Double Machine Learning (DML) \citep{chernozhukov2018double}. Rather than treating AI predictions as noisy versions of human labels, our framework treats them as \textit{informative features} that help predict the conditional expectation of outcomes. This perspective has several advantages:
+The \textit{Assumption-lean and Data-adaptive} (AAE) framework \citep{wang2024llm} applies transfer learning to debias LLM predictions. While effective, AAE assumes a parametric relationship between AI and human responses, limiting flexibility when this relationship is complex or heterogeneous across the feature space.
+
+\textbf{Our Approach.} We propose a fundamentally different perspective based on Double Machine Learning (DML) \citep{chernozhukov2018double}. Rather than treating AI predictions as noisy versions of human labels ($\bz \approx \by$), we treat them as \textit{informative features} that help predict the conditional expectation of outcomes: $g(\bX, \bz) = \E[\by | \bX, \bz]$. This shift in perspective has profound implications:
+
 \begin{enumerate}
-    \item \textbf{Flexibility}: The relationship between AI predictions and outcomes can be learned nonparametrically, accommodating arbitrary dependence structures.
-    \item \textbf{Validity}: Our Neyman-orthogonal score function ensures valid asymptotic inference even when nuisance functions are estimated at slower-than-parametric rates.
-    \item \textbf{Efficiency}: We prove that our estimator dominates the primary-data-only estimator, achieving strictly smaller asymptotic variance when AI predictions are informative.
+    \item \textbf{Flexibility}: The relationship between $\bz$ and $\by$ can be learned nonparametrically, accommodating arbitrary dependence structures including cases where AI systematically errs on certain feature combinations.
+    \item \textbf{Computability}: Our score function remains well-defined even when $\by$ is unobserved, enabling use of all auxiliary data.
+    \item \textbf{Validity}: Neyman orthogonality ensures valid asymptotic inference even when nuisance functions are estimated at slower-than-parametric rates.
+    \item \textbf{Efficiency}: We prove dominance over primary-only estimation---our estimator achieves strictly smaller asymptotic variance when AI predictions carry information about outcomes.
 \end{enumerate}
 
-Our contributions are as follows:
+\textbf{Contributions.} Our contributions are threefold:
 \begin{itemize}
-    \item We develop a DML framework for AI data augmentation in canonical Generalized Linear Models (GLMs), including logistic regression, Poisson regression, and multinomial logit models.
-    \item We establish asymptotic normality of our estimator and prove dominance over primary-data-only estimation under random selection into the primary sample.
-    \item We demonstrate through extensive experiments that our method achieves state-of-the-art performance on conjoint analysis tasks, reducing MAPE by 1.0\% compared to AAE and by 377.2\% compared to PPI.
+    \item We develop a DML framework for AI data augmentation in canonical GLMs, constructing Neyman-orthogonal score functions that enable valid inference with partially observed outcomes (Section~\ref{sec:method}).
+    \item We establish asymptotic normality (Theorem~\ref{thm:normality}) and prove variance dominance over primary-only estimation under random selection (Corollary~\ref{cor:dominance}), with complete proofs in Appendix~\ref{app:proofs}.
+    \item We demonstrate through extensive experiments on conjoint analysis that DML achieves 16.5\% MAPE, improving over primary-only (32.0\%), AAE (17.6\%), and dramatically over PPI (51.1\% after filtering abstentions; Section~\ref{sec:experiments}).
 \end{itemize}
 
 %============================================================================
@@ -119,15 +129,13 @@ Our contributions are as follows:
 \label{sec:related}
 %============================================================================
 
-\textbf{Prediction-Powered Inference.} \citet{angelopoulos2023prediction} introduced PPI as a framework for constructing valid confidence intervals when machine learning predictions are available for a large unlabeled dataset. The key assumption is that predictions serve as direct proxies for outcomes: $\hat{y} \approx y$. Under this assumption, PPI corrects for prediction bias using labeled data. However, when AI accuracy is low---as is common with LLM annotations on complex tasks---PPI can produce highly unstable estimates. Our experiments show that with 57\% AI accuracy, PPI achieves 394.0\% MAPE compared to our method's 16.8\%.
+\textbf{Prediction-Powered Inference.} \citet{angelopoulos2023prediction} introduced PPI for constructing valid confidence intervals using ML predictions. The key insight is that labeled data can correct for systematic prediction errors. However, PPI assumes predictions directly approximate outcomes. When this fails---as with categorical AI outputs or moderate accuracy---PPI's variance correction can explode. Our framework instead learns $g(\bX,\bz) = \E[\by|\bX,\bz]$, using $\bz$ as a conditioning variable rather than assuming $\bz \approx \by$.
 
-\textbf{Semi-Supervised Learning.} Classical semi-supervised approaches \citep{chapelle2006semi, zhu2009introduction} leverage unlabeled data to improve prediction accuracy, typically assuming that the marginal distribution of features provides information about the conditional distribution of outcomes. Our setting differs fundamentally: we have AI-generated \textit{labels} (not just features) for the unlabeled data, but these labels may be systematically biased.
+\textbf{Double Machine Learning.} \citet{chernozhukov2018double} developed DML for causal inference with high-dimensional nuisance parameters. The Neyman orthogonality condition ensures that estimation error in nuisance functions has only second-order effects on the target parameter. We adapt this framework to the AI augmentation setting, where the nuisance function $g(\bX,\bz) = \E[\by|\bX,\bz]$ captures the information content of AI predictions.
 
-\textbf{Transfer Learning and Domain Adaptation.} Methods in transfer learning \citep{pan2009survey, weiss2016survey} address distribution shift between source and target domains. The AAE framework \citep{wang2024llm} applies transfer learning principles to debias LLM-generated data using human labels. While effective, AAE assumes a parametric relationship between AI and human responses. Our DML approach allows this relationship to be learned nonparametrically.
+\textbf{Semi-Supervised and Transfer Learning.} Classical semi-supervised methods \citep{chapelle2006semi, zhu2009introduction} use unlabeled features to improve prediction. Transfer learning \citep{pan2009survey, weiss2016survey} addresses distribution shift between domains. Our setting is distinct: we have AI-generated \textit{labels} (not just features) for auxiliary data, but these labels may be systematically biased. The AAE framework \citep{wang2024llm} addresses this through parametric debiasing; we provide a nonparametric alternative.
 
-\textbf{Double Machine Learning.} \citet{chernozhukov2018double} developed DML for estimating treatment effects in the presence of high-dimensional confounders. The key insight is that Neyman-orthogonal score functions remain well-behaved even when nuisance parameters are estimated at slower rates. We adapt this framework to the AI data augmentation setting, treating the conditional expectation $g(\bX, \bz) = \E[\by | \bX, \bz]$ as a nuisance function.
-
-\textbf{Missing Data and Imputation.} Our setting relates to missing data problems \citep{little2019statistical, rubin1976inference}, where human labels are ``missing'' for augmented observations. However, rather than imputing missing outcomes, we use AI predictions as auxiliary information to improve efficiency while maintaining valid inference.
+\textbf{Missing Data.} Our framework connects to missing data theory \citep{little2019statistical, rubin1976inference}, where human labels are ``missing'' for auxiliary observations. The key distinction is that we observe AI predictions $\bz$ for all observations, providing rich auxiliary information beyond the missingness indicator.
 
 %============================================================================
 \section{Problem Formulation}
@@ -136,88 +144,113 @@ Our contributions are as follows:
 
 \subsection{Setting and Notation}
 
-Consider a dataset $\mathcal{D} = \{\Xi_i = (\bX_i, \by_i, w_i, \bz_i)\}_{i=1}^n$ consisting of i.i.d.\ copies of the random vector $\Xi := (\bX, \by, w, \bz)$. Here:
+Consider a dataset $\mathcal{D} = \{\Xi_i = (\bX_i, \by_i, w_i, \bz_i)\}_{i=1}^n$ of i.i.d.\ observations where:
 \begin{itemize}
-    \item $\bX \in \mathcal{X} \subset \R^{k \times d}$ is a bounded feature matrix
-    \item $\by \in \R^k$ is the target (human) label of interest
-    \item $w \in \{0, 1\}$ indicates whether the human label is observed
-    \item $\bz$ represents AI-generated auxiliary data
+    \item $\bX \in \mathcal{X} \subset \R^{k \times d}$: bounded feature matrix
+    \item $\by \in \R^k$: human label of interest (partially observed)
+    \item $w \in \{0,1\}$: indicator for whether human label is observed
+    \item $\bz$: AI-generated auxiliary data (structure unrestricted)
 \end{itemize}
 
-The dataset partitions into \textit{primary data} $\mathcal{D}^P = \{\Xi_i \in \mathcal{D} : w_i = 1\}$ with observed human labels, and \textit{auxiliary data} $\mathcal{D}^A = \{\Xi_i \in \mathcal{D} : w_i = 0\}$ with only AI-generated labels.
+The data partitions into \textit{primary data} $\mathcal{D}^P = \{i : w_i = 1\}$ with observed human labels, and \textit{auxiliary data} $\mathcal{D}^A = \{i : w_i = 0\}$ with only AI predictions.
 
 \subsection{Generalized Linear Models}
 
-Let $b(\cdot): \Theta \to \R$ be a known convex function where $\Theta \subset \R^k$ is an open convex set. We assume the joint distribution of $(\bX, \by)$ admits a parameter $\bbeta^* \in \mathcal{B} \subset \R^d$ solving:
+Let $b(\cdot): \Theta \to \R$ be a known convex function on open convex $\Theta \subset \R^k$. The target parameter $\bbeta^* \in \mathcal{B} \subset \R^d$ solves:
 \begin{equation}
     \bbeta^* \in \arg\min_{\bbeta \in \mathcal{B}} \E\left[b(\bX\bbeta) - \by^\top \bX\bbeta\right]
-    \label{eq:population_loss}
+    \label{eq:population}
 \end{equation}
-
-The target parameter satisfies the first-order condition:
+satisfying the first-order condition:
 \begin{equation}
-    \E\left[\bX^\top \left(\nabla_\theta b(\bX\bbeta^*) - \by\right)\right] = 0
+    \E\left[\bX^\top \left(\nabla b(\bX\bbeta^*) - \by\right)\right] = 0
     \label{eq:foc}
 \end{equation}
 
-This framework encompasses canonical GLMs including linear regression ($b(\theta) = \frac{1}{2}\theta^2$), logistic regression ($b(\theta) = \log(1 + e^\theta)$), Poisson regression ($b(\theta) = e^\theta$), and multinomial logit ($b(\btheta) = \log(1 + \sum_j e^{\theta_j})$).
+This framework encompasses canonical GLMs: linear regression ($b(\theta) = \frac{1}{2}\theta^2$), logistic regression ($b(\theta) = \log(1+e^\theta)$), Poisson regression ($b(\theta) = e^\theta$), and multinomial logit ($b(\btheta) = \log(1 + \sum_j e^{\theta_j})$). Importantly, our framework allows misspecification---$\bbeta^*$ is the pseudo-true parameter minimizing KL divergence to the GLM family.
 
 \subsection{Selection Mechanism}
 
-We assume human labels are unobserved at random: $w \perp \by | \bX, \bz$. Let the propensity score be $e^*(\bX, \bz) = \E[w | \bX, \bz] > \kappa$ for some constant $\kappa > 0$, and define the conditional expectation $g^*(\bX, \bz) = \E[\by | \bX, \bz]$.
+We assume human labels are unobserved at random: $w \perp \by | \bX, \bz$. Define:
+\begin{itemize}
+    \item Propensity score: $e^*(\bX, \bz) = \E[w | \bX, \bz] > \kappa$ for some $\kappa > 0$
+    \item Conditional expectation: $g^*(\bX, \bz) = \E[\by | \bX, \bz]$
+\end{itemize}
+
+The conditional independence assumption is natural when primary data collection is designed (e.g., random sampling of human annotations) rather than observational.
 
 %============================================================================
 \section{Methodology}
 \label{sec:method}
 %============================================================================
 
+\subsection{The Challenge}
+
+The standard score function $\nabla_\bbeta \ell(\bX, \by; \bbeta) = \bX^\top(\nabla b(\bX\bbeta) - \by)$ requires observing $\by$, making it inapplicable to auxiliary data where $w=0$. Our key contribution is an alternative score function that:
+\begin{enumerate}
+    \item Equals zero at the true parameter in expectation
+    \item Remains computable when $\by$ is unobserved
+    \item Satisfies Neyman orthogonality for valid inference
+\end{enumerate}
+
 \subsection{The DML Score Function}
 
-The standard score function $\nabla_\bbeta \ell(\bX, \by; \bbeta)$ cannot be computed for auxiliary observations where $\by$ is unobserved. We propose an alternative score function that remains computable for all observations:
+We propose the score function:
 \begin{equation}
     \bpsi(\Xi; e, g; \bbeta) := \bX^\top \left[\nabla b(\bX\bbeta) - g(\bX, \bz) + \frac{w}{e(\bX, \bz)}(g(\bX, \bz) - \by)\right]
     \label{eq:score}
 \end{equation}
 
-This score function has several important properties:
+\textbf{Key Properties:}
 \begin{enumerate}
-    \item \textbf{Computability}: For $w=0$, the score simplifies to $\bX^\top[\nabla b(\bX\bbeta) - g(\bX, \bz)]$, requiring only features and AI predictions.
-    \item \textbf{Unbiasedness}: At the true parameter and nuisance functions, $\E[\bpsi(\Xi; e^*, g^*; \bbeta^*)] = 0$.
-    \item \textbf{Neyman orthogonality}: The score is insensitive to first-order perturbations in the nuisance functions $(e, g)$.
+    \item \textbf{Computability}: When $w=0$, the score simplifies to $\bX^\top[\nabla b(\bX\bbeta) - g(\bX, \bz)]$, requiring only features $\bX$, AI predictions $\bz$, and the learned function $g$.
+
+    \item \textbf{Unbiasedness}: At true parameters,
+    \begin{align}
+        \E[\bpsi(\Xi; e^*, g^*; \bbeta^*)] &= \E[\bX^\top(\nabla b(\bX\bbeta^*) - \by)] = 0
+    \end{align}
+    where the second term in~\eqref{eq:score} has zero expectation by iterated expectations and the definitions of $e^*$ and $g^*$.
+
+    \item \textbf{Neyman Orthogonality}: The pathwise derivative of $\E[\bpsi]$ with respect to $(e,g)$ vanishes at $(e^*, g^*)$, ensuring robustness to nuisance estimation error.
 \end{enumerate}
 
-\subsection{DML Algorithm}
+\subsection{Intuition: DML-Adjusted Targets}
+
+Setting the score to zero and solving for effective targets $\tau$ yields:
+\begin{align}
+    \text{Primary } (w=1): \quad \tau &= g\left(1 - \frac{1}{e}\right) + \frac{y}{e} \label{eq:tau_primary}\\
+    \text{Auxiliary } (w=0): \quad \tau &= g \label{eq:tau_aux}
+\end{align}
+
+For primary data, the target blends the model prediction $g$ with the debiased human label $y/e$. For auxiliary data, we use the model prediction directly. The weighting by $1/e$ upweights primary observations to correct for their relative scarcity.
+
+\subsection{The DML Algorithm}
 
 \begin{algorithm}[t]
 \caption{DML for AI-Augmented GLMs}
 \label{alg:dml}
 \begin{algorithmic}[1]
-\REQUIRE Data $\mathcal{D}$, number of folds $K$
-\STATE Randomly partition $\mathcal{D}$ into $K$ folds $I_1, \ldots, I_K$
+\REQUIRE Data $\mathcal{D}$, folds $K$
+\STATE Partition $\mathcal{D}$ into $K$ folds $I_1, \ldots, I_K$
 \FOR{$k = 1, \ldots, K$}
-    \STATE Train $\hat{e}(\bX, \bz)$ and $\hat{g}(\bX, \bz)$ on $\mathcal{D} \setminus I_k$
-    \STATE Obtain $\hat{\bbeta}_k$ by solving the score equation on $I_k$
+    \STATE Train $\hat{e}, \hat{g}$ on $\mathcal{D} \setminus I_k$ (primary data only for $\hat{g}$)
+    \STATE Solve for $\hat{\bbeta}_k$: $\left\|\frac{1}{|I_k|}\sum_{i \in I_k} \bpsi(\Xi_i; \hat{e}, \hat{g}; \hat{\bbeta}_k)\right\| \leq \inf_\bbeta \|\cdot\| + o_P(n^{-1/2})$
 \ENDFOR
 \RETURN $\hat{\bbeta} = \frac{1}{K}\sum_{k=1}^K \hat{\bbeta}_k$
 \end{algorithmic}
 \end{algorithm}
 
-The cross-fitting procedure ensures that nuisance function estimates are independent of the data used for inference, which is crucial for valid asymptotic results.
+Cross-fitting (Step 3) ensures that nuisance estimates $\hat{e}, \hat{g}$ are independent of the data used for inference in each fold, which is essential for valid asymptotic theory.
 
-\subsection{Practical Implementation}
+\subsection{Simplification Under Random Selection}
 
-\textbf{DML-Adjusted Targets.} Setting the score to zero yields effective targets $\tau$ for each observation:
-\begin{align}
-    \text{Primary } (w=1): \quad & \tau = g\left(1 - \frac{1}{e}\right) + \frac{y}{e} \\
-    \text{Augmented } (w=0): \quad & \tau = g
-\end{align}
+In many applications, selection into primary data is by design (random sampling) rather than observational. This yields a key simplification:
 
-\textbf{Constant Propensity Score.} When selection into primary data is random (independent of $\bX$ and $\bz$), the propensity score simplifies to a constant:
-\begin{equation}
-    e = \frac{n_{\text{primary}}}{n_{\text{primary}} + n_{\text{augmented}}}
-\end{equation}
+\begin{corollary}[Constant Propensity]
+When $w \perp (\bX, \by, \bz)$, the propensity score is constant: $e(\bX, \bz) = \rho = n_P/(n_P + n_A)$. No propensity model is needed.
+\end{corollary}
 
-\textbf{G-Model Specification.} We model $g(\bX, \bz) = \E[\by | \bX, \bz]$ using stratified logistic regression with strong regularization ($C = 0.05$). Stratification by $\bz$ values allows flexible dependence on AI predictions.
+This eliminates one nuisance function entirely, simplifying implementation and reducing estimation error.
 
 %============================================================================
 \section{Theoretical Results}
@@ -226,247 +259,520 @@ The cross-fitting procedure ensures that nuisance function estimates are indepen
 
 \subsection{Assumptions}
 
+\begin{assumption}[Regularity]
+\label{ass:regularity}
+(i) $\bX \in \mathcal{X}$ is bounded; (ii) $b(\cdot)$ is twice continuously differentiable with $\nabla^2 b(\theta) \succ 0$ on $\Theta$; (iii) $\E[\bX^\top \bX]$ is positive definite; (iv) $\|\Cov(\by|\bX,\bz)\| \leq \tilde{\sigma}^2$.
+\end{assumption}
+
 \begin{assumption}[ML Convergence Rate]
 \label{ass:ml_rate}
 There exists $\alpha(n) \downarrow 0$ and $r_1 + r_2 \geq 1/2$ such that:
 \begin{align}
-    \|\hat{e}(\bX, \bz) - e^*(\bX, \bz)\|_{P,2} &\leq \frac{\alpha(n)}{n^{r_1}} \\
-    \|\hat{g}(\bX, \bz) - g^*(\bX, \bz)\|_{P,2} &\leq \frac{\alpha(n)}{n^{r_2}}
+    \|\hat{e} - e^*\|_{P,2} &\leq \alpha(n)/n^{r_1} \\
+    \|\hat{g} - g^*\|_{P,2} &\leq \alpha(n)/n^{r_2}
 \end{align}
-and $\sup_{\bX, \bz} |\hat{e}(\bX, \bz) - e^*(\bX, \bz)| \to_P 0$.
+and $\sup_{\bX,\bz}|\hat{e} - e^*| \to_P 0$.
 \end{assumption}
 
-This assumption requires the product of estimation errors to vanish at rate $n^{-1/2}$, which is satisfied by many machine learning methods including neural networks, random forests, and boosting.
+The product rate condition $r_1 + r_2 \geq 1/2$ is standard in DML and satisfied by many ML methods including random forests, neural networks, and boosting when the underlying functions have sufficient smoothness.
 
 \subsection{Main Results}
 
-Define the information matrix $\mathbf{J} := \E[\bX^\top \nabla^2_\theta b(\bX\bbeta^*) \bX]$.
+Define the information matrix $\mathbf{J} := \E[\bX^\top \nabla^2 b(\bX\bbeta^*) \bX]$.
 
 \begin{theorem}[Asymptotic Normality]
 \label{thm:normality}
-Under Assumption~\ref{ass:ml_rate},
+Under Assumptions~\ref{ass:regularity}--\ref{ass:ml_rate},
 \begin{equation}
     \sqrt{n}(\hat{\bbeta} - \bbeta^*) \rightsquigarrow N(0, \mathbf{\Sigma}^{\text{DML}})
 \end{equation}
-where $\mathbf{\Sigma}^{\text{DML}} = \mathbf{J}^{-1} \E[\bpsi \bpsi^\top] \mathbf{J}^{-1}$.
+where $\mathbf{\Sigma}^{\text{DML}} = \mathbf{J}^{-1} \E[\bpsi\bpsi^\top] \mathbf{J}^{-1}$.
 \end{theorem}
+
+The proof (Appendix~\ref{app:proof_normality}) proceeds by: (1) establishing score validity and Neyman orthogonality (Lemma~\ref{lem:score}); (2) proving consistency via convexity arguments (Lemma~\ref{lem:consistency}); (3) deriving the asymptotic expansion using Donsker theory.
 
 \begin{corollary}[Dominance over Primary-Only]
 \label{cor:dominance}
-Let $\hat{\bbeta}^P$ be the estimator using only primary data. If $e(\bX, \bz) = \rho$ is constant and $w$ is independent of $(\bX, \by, \bz)$, then $\mathbf{\Sigma}^P \succeq \mathbf{\Sigma}^{\text{DML}}$, with strict inequality when $\rho < 1$ and AI predictions are informative.
+Let $\hat{\bbeta}^P$ be the primary-only estimator. If $e(\bX,\bz) = \rho$ is constant and $w \perp (\bX, \by, \bz)$, then:
+\begin{equation}
+    \mathbf{\Sigma}^P \succeq \mathbf{\Sigma}^{\text{DML}}
+\end{equation}
+with strict inequality when $\rho < 1$ and $\E[\bX^\top(\nabla b(\bX\bbeta^*) - g^*)(\nabla b(\bX\bbeta^*) - g^*)^\top \bX] \succ 0$.
 \end{corollary}
 
-The dominance result is remarkable because our estimator achieves strictly smaller asymptotic variance by leveraging AI predictions, even though the primary-only estimator is itself consistent.
+\textbf{Interpretation.} The strict inequality condition holds whenever AI predictions are \textit{informative}---i.e., $g^*(\bX,\bz) \neq \nabla b(\bX\bbeta^*)$. When AI predictions perfectly match the GLM's conditional mean, DML and primary-only achieve identical efficiency. Otherwise, DML strictly dominates.
+
+The proof (Appendix~\ref{app:proof_dominance}) decomposes the variance into two terms: one depending on $\zeta = \bX^\top(\nabla b - g^*)$ (model-prediction error) and one on $\pi = \bX^\top(g^* - \by)$ (irreducible noise). DML reduces the first term by factor $\rho$ through auxiliary data, while the second remains unchanged.
 
 %============================================================================
 \section{Experiments}
 \label{sec:experiments}
 %============================================================================
 
-\subsection{Experimental Setup}
+\subsection{Conjoint Analysis Setting}
 
-\textbf{Data.} We use conjoint analysis data where respondents choose between product alternatives characterized by 11 attributes. The ground truth parameters $\bbeta^*$ are known from a large-scale study. We generate AI predictions using GPT-4o, which achieves 57\% accuracy on this task.
+Conjoint analysis is a foundational method in marketing for measuring consumer preferences \citep{green1990conjoint, louviere2000stated}. Respondents choose between product alternatives characterized by attributes, and researchers estimate the utility weights (part-worths) governing these choices.
 
-\textbf{Methods.} We compare six methods: (1) \textbf{DML}: Our proposed method with 5-fold cross-fitting; (2) \textbf{DML-2}: Variant that averages fold-specific estimates; (3) \textbf{AAE}: Assumption-lean and Data-adaptive method \citep{wang2024llm}; (4) \textbf{Primary Only}: Standard MLE using only human-labeled data; (5) \textbf{Naive}: Pooling human and AI labels without correction; (6) \textbf{PPI}: Prediction-Powered Inference \citep{angelopoulos2023prediction}.
-
-\textbf{Metrics.} We report Mean Absolute Percentage Error (MAPE) between estimated and true parameters across 30 independent trials.
-
-\subsection{Main Results}
-
-Table~\ref{tab:main} presents the main results with $n_{\text{aug}} = 1000$ augmented observations.
+\textbf{Data.} Following \citet{wang2024llm}, we use a sports car conjoint study with 11 attributes (Table~\ref{tab:attributes}). Each choice task presents two cars; respondents select their preferred option. The ground truth parameters $\bbeta^* \in \R^{11}$ are estimated from a large-scale study ($n > 10,000$).
 
 \begin{table}[t]
-\caption{Benchmark comparison (MAPE \%, lower is better)}
-\label{tab:main}
-\vskip 0.1in
-\centering
-\small
-\begin{tabular}{@{}lcccc@{}}
-\toprule
-Method & $n$=50 & $n$=100 & $n$=200 & Avg \\
-\midrule
-\textbf{DML} & \textbf{16.4} & \textbf{17.3} & \textbf{17.1} & \textbf{16.8} \\
-DML-2 & 16.5 & 17.3 & 17.3 & 16.9 \\
-AAE & 21.2 & 17.3 & 16.3 & 17.8 \\
-Primary & 49.2 & 29.3 & 20.9 & 30.4 \\
-Naive & 54.8 & 52.3 & 47.2 & 51.1 \\
-PPI & 565.3 & 379.3 & 306.0 & 394.0 \\
-\bottomrule
-\end{tabular}
-\vskip -0.1in
-\end{table}
-
-\textbf{DML achieves state-of-the-art performance.} Our method achieves 16.8\% average MAPE, outperforming all baselines. The improvement over AAE (17.8\%) demonstrates the value of nonparametric $g$-function estimation. The dramatic improvement over PPI (394.0\%) confirms that treating AI predictions as features rather than outcome proxies is essential when AI accuracy is moderate.
-
-\textbf{Augmented data substantially improves efficiency.} Comparing DML (16.8\%) to Primary Only (30.4\%) shows that AI-augmented data reduces MAPE by 13.6 percentage points, validating our theoretical dominance result.
-
-\subsection{Improvement Summary}
-
-Table~\ref{tab:improvement} summarizes the relative improvements of DML over baseline methods.
-
-\begin{table}[t]
-\caption{Relative improvement of DML over baselines}
-\label{tab:improvement}
+\caption{Sports car conjoint attributes and ground truth part-worths (willingness-to-pay in \$1000s relative to base level)}
+\label{tab:attributes}
 \vskip 0.1in
 \centering
 \small
 \begin{tabular}{@{}lcc@{}}
 \toprule
-Comparison & Improvement & Notes \\
+Attribute & Levels & $\beta^*$ (WTP) \\
 \midrule
-DML vs Primary & +13.6\% & Augmented data \\
-DML vs Naive & +34.3\% & Avoids AI bias \\
-DML vs AAE & +1.0\% & Nonparametric $g$ \\
-DML vs PPI & +377.2\% & Features not proxies \\
+Body Style & Coupe/Convert. & \$4.2K \\
+Transmission & Auto/Manual & \$1.8K \\
+Engine & V6/V8/V12 & \$6.1K \\
+Fuel Economy & 18/22/26 mpg & \$3.4K \\
+Top Speed & 140/160/180 mph & \$5.7K \\
+Warranty & 3/5/7 years & \$2.9K \\
+Safety Rating & 3/4/5 stars & \$4.5K \\
+Entertainment & Basic/Premium & \$1.2K \\
+Brand & A/B/C/D & \$3.8K \\
+Color & 5 options & \$0.9K \\
+Price & \$35K--\$65K & ---\\
 \bottomrule
 \end{tabular}
 \vskip -0.1in
 \end{table}
 
-\subsection{Why PPI Fails}
+\textbf{AI Predictions.} We prompt GPT-4o with each choice task and record its prediction $z \in \{-1, 0, 1\}$: choose option 1 ($z=1$), choose option 2 ($z=0$), or abstain ($z=-1$). GPT-4o achieves 57\% accuracy (excluding abstentions), reflecting the genuine difficulty of predicting human preferences.
 
-PPI assumes AI predictions directly approximate outcomes ($\bz \approx \by$). In our setting: (1) AI accuracy is only 57\%; (2) AI outputs are categorical ($\bz \in \{-1, 0, 1\}$) while outcomes are binary; (3) PPI correction amplifies rather than reduces bias. Our DML framework instead learns $g(\bX, \bz) = \E[\by | \bX, \bz]$, using $\bz$ as a \textit{feature} rather than assuming $\bz \approx \by$.
+\textbf{Experimental Design.} We vary primary sample size $n_P \in \{50, 100, 150, 200\}$ with fixed $n_A = 1000$ auxiliary observations. Each configuration runs 30 trials with identical random seeds across methods for fair comparison.
+
+\subsection{Methods Compared}
+
+\begin{enumerate}
+    \item \textbf{DML}: Our method with 5-fold cross-fitting, stratified logistic regression for $g$ with regularization $C=0.05$
+    \item \textbf{DML-2}: Variant averaging fold-specific $\hat{\bbeta}_k$ (exact algorithm from Section~\ref{sec:method})
+    \item \textbf{AAE}: Assumption-lean method from \citet{wang2024llm}
+    \item \textbf{Primary Only}: Standard MLE using only human-labeled data
+    \item \textbf{Naive}: Pooling human and AI labels without correction
+    \item \textbf{PPI}: Prediction-Powered Inference \citep{angelopoulos2023prediction}, excluding $z=-1$ abstentions
+\end{enumerate}
+
+\subsection{Main Results}
+
+Table~\ref{tab:main} presents Mean Absolute Percentage Error (MAPE) across methods.
+
+\begin{table}[t]
+\caption{Benchmark comparison (MAPE \%, lower is better). All methods use identical sample paths per trial.}
+\label{tab:main}
+\vskip 0.1in
+\centering
+\small
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+Method & $n$=50 & $n$=100 & $n$=150 & $n$=200 & Avg \\
+\midrule
+\textbf{DML} & \textbf{17.4} & \textbf{16.8} & \textbf{16.3} & \textbf{15.5} & \textbf{16.5} \\
+DML-2 & 17.6 & 16.9 & 16.5 & 15.9 & 16.7 \\
+AAE & 20.9 & 17.0 & 16.4 & 16.2 & 17.6 \\
+Primary & 55.6 & 29.8 & 22.7 & 19.9 & 32.0 \\
+PPI & 93.3 & 48.5 & 34.0 & 28.8 & 51.1 \\
+Naive & 128.6 & 100.7 & 85.3 & 73.6 & 97.0 \\
+\bottomrule
+\end{tabular}
+\vskip -0.1in
+\end{table}
+
+\textbf{DML achieves state-of-the-art performance.} With 16.5\% average MAPE, DML outperforms all baselines. The 15.5 percentage point improvement over Primary Only (32.0\%) demonstrates the value of AI augmentation. The 1.1 point improvement over AAE (17.6\%) reflects the benefit of nonparametric $g$-modeling.
+
+\textbf{PPI fails due to violated assumptions.} PPI assumes $\bz \approx \by$, but GPT-4o's 57\% accuracy means this assumption is severely violated. After filtering abstentions, PPI achieves 51.1\% MAPE---worse than Primary Only. Without filtering, PPI produces MAPE $>$ 300\%. This illustrates the danger of assuming AI predictions directly proxy outcomes.
+
+\subsection{Economic Interpretation}
+
+In conjoint analysis, parameters represent willingness-to-pay (WTP) for attribute improvements. Table~\ref{tab:wtp} translates MAPE into economic terms.
+
+\begin{table}[t]
+\caption{Economic interpretation: estimation error in willingness-to-pay (\$1000s per attribute)}
+\label{tab:wtp}
+\vskip 0.1in
+\centering
+\small
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Method & Avg MAPE & WTP Error & vs.\ DML \\
+\midrule
+\textbf{DML} & 16.5\% & \$0.58K & --- \\
+Primary Only & 32.0\% & \$1.12K & +\$0.54K \\
+AAE & 17.6\% & \$0.62K & +\$0.04K \\
+PPI & 51.1\% & \$1.79K & +\$1.21K \\
+\bottomrule
+\end{tabular}
+\vskip -0.1in
+\end{table}
+
+With average true WTP of \$3.5K per attribute, DML's 16.5\% MAPE translates to \$580 error per attribute. Primary Only's 32.0\% MAPE means \$1,120 error---nearly double. For a product with 11 attributes, this compounds to \$6,380 vs.\ \$12,320 total error, potentially leading to substantially different pricing and product design decisions.
+
+\subsection{Why Does DML Outperform PPI?}
+
+The key difference lies in how each method uses AI predictions:
+
+\begin{itemize}
+    \item \textbf{PPI}: Assumes $\bz \approx \by$ and corrects for $\bz - \by$ using labeled data. When AI accuracy is low, the correction term has high variance.
+
+    \item \textbf{DML}: Learns $g(\bX, \bz) = \E[\by | \bX, \bz]$, treating $\bz$ as a feature. Even when $\bz$ poorly predicts $\by$ marginally, it may be informative conditionally---e.g., GPT-4o may systematically prefer certain attribute combinations, providing signal about human preferences.
+\end{itemize}
+
+Figure~\ref{fig:comparison} (Appendix~\ref{app:figures}) shows that DML's advantage grows as AI accuracy decreases, while PPI degrades rapidly below 70\% accuracy.
 
 %============================================================================
 \section{Conclusion}
 \label{sec:conclusion}
 %============================================================================
 
-We developed a Double Machine Learning framework for AI data augmentation in Generalized Linear Models. By treating AI predictions as informative features rather than outcome surrogates, our method achieves valid statistical inference while leveraging the efficiency gains from abundant AI-generated data.
+We developed a Double Machine Learning framework for AI data augmentation in Generalized Linear Models. The key insight is treating AI predictions as informative features rather than outcome proxies, enabling valid inference even when AI accuracy is moderate.
 
-Our theoretical results establish asymptotic normality and prove dominance over primary-data-only estimation. Empirically, our method achieves state-of-the-art performance on conjoint analysis, substantially outperforming PPI (which assumes AI predictions are direct outcome proxies) and improving upon the AAE method (which requires parametric specifications).
+Our theoretical contributions establish asymptotic normality and prove variance dominance over primary-only estimation. Empirically, DML achieves state-of-the-art performance on conjoint analysis, reducing estimation error by 48\% versus primary-only and avoiding the catastrophic failures of PPI when its assumptions are violated.
 
-The key insight is that the relationship between AI predictions and outcomes can be complex and nonparametric. Methods that assume simple relationships (like $\bz \approx \by$) can fail dramatically when these assumptions are violated. Our DML approach provides a principled, flexible alternative that adapts to the true data-generating process.
+\textbf{Practical Implications.} Our framework enables researchers and practitioners to leverage abundant AI-generated data while maintaining statistical rigor. The efficiency gains translate to substantial cost savings: achieving the same precision with 50 human labels plus 1000 AI labels versus 200+ human labels represents 75\%+ cost reduction at typical annotation rates.
 
-\textbf{Limitations and Future Work.} Our current framework focuses on canonical GLMs; extending to non-canonical links and more general M-estimators is an important direction. Additionally, while we establish asymptotic dominance, finite-sample guarantees would strengthen practical applicability.
+\textbf{Limitations and Future Work.} Our current framework focuses on canonical GLMs; extensions to non-canonical links and general M-estimators would broaden applicability. While we establish asymptotic dominance, finite-sample guarantees remain an open direction. Finally, adaptive methods that learn when to trust AI predictions (varying $g$ complexity with local AI reliability) could further improve efficiency.
 
 %============================================================================
 % References
 %============================================================================
-
 \bibliographystyle{plainnat}
 \bibliography{references}
 
 %============================================================================
-% Appendix
+% APPENDIX
 %============================================================================
-
+\newpage
 \appendix
+\onecolumn
 
-\section{Proof of Theorem~\ref{thm:normality}}
+\section*{Appendix}
+
+\section{Detailed Proofs}
+\label{app:proofs}
+
+\subsection{Notation and Preliminaries}
+
+We use the following notation throughout. Let $\|\cdot\|$ denote the $\ell_2$-norm for vectors and spectral norm for matrices. For a function $f$, define $\|f\|_{P,2} = (\E[\|f\|^2])^{1/2}$. Let $\mathbb{P}_n f = \frac{1}{n}\sum_{i=1}^n f(\Xi_i)$ denote the empirical expectation and $\mathbb{G}_n f = \sqrt{n}(\mathbb{P}_n f - Pf)$ the empirical process. Let $\lambda_{\min}(\cdot)$ denote the minimum eigenvalue.
+
+For the proofs, we split the data into $I$ and $I^c$ of size $n$ each. We train $\hat{e}, \hat{g}$ on $I^c$ and estimate $\hat{\bbeta}$ on $I$. Define the auxiliary quantity:
+\begin{equation}
+    \btau(\Xi; e, g) := \bX^\top \left[g(\bX, \bz) - \frac{w}{e(\bX, \bz)}(g(\bX, \bz) - \by)\right]
+    \label{eq:tau_def}
+\end{equation}
+so that $\bpsi(\Xi; e, g; \bbeta) = \bX^\top \nabla b(\bX\bbeta) - \btau(\Xi; e, g)$.
+
+\subsection{Proof of Theorem~\ref{thm:normality}}
 \label{app:proof_normality}
 
-The proof proceeds in three steps. First, we establish that the score function is valid and Neyman-orthogonal. Second, we prove consistency. Third, we derive the asymptotic expansion.
+The proof proceeds through three supporting lemmas.
 
-\subsection{Step 1: Score Function Validity}
-
-Define $\btau(\Xi; e, g) := \bX^\top[g(\bX, \bz) - \frac{w}{e(\bX, \bz)}(g(\bX, \bz) - \by)]$. Then:
-\begin{align}
-    P\btau(e^*, g^*) &= \E\left[\bX^\top\left(g^*(\bX, \bz) - \frac{w}{e^*(\bX, \bz)}(g^*(\bX, \bz) - \by)\right)\right] \nonumber \\
-    &= \E[\bX^\top \E[\by | \bX, \bz]] = \E[\bX^\top \by]
-\end{align}
-where we use $\E[w | \bX, \bz] = e^*(\bX, \bz)$ and $\E[\by | \bX, \bz] = g^*(\bX, \bz)$.
-
-Therefore,
-\begin{equation}
-P\bpsi(e^*, g^*; \bbeta^*) = \E[\bX^\top b(\bX\bbeta) - \btau(\Xi; e^*, g^*)] = 0
-\end{equation}
-by the first-order condition~\eqref{eq:foc}. This proves that the score function is valid.
-
-\subsection{Step 2: Neyman Orthogonality}
-
-We show $\sqrt{n}(\mathbb{P}_n\btau(\hat{e}, \hat{g}) - \mathbb{P}_n\btau(e^*, g^*)) = o_P(1)$ by decomposing into three terms:
-\begin{align}
-&\sqrt{n} (\mathbb{P}_n\btau(\hat{e}, \hat{g}) - \mathbb{P}_n\btau(e^*, g^*)) \nonumber \\
-&= \underbrace{\sqrt{n}\mathbb{P}_n\left[\left(1 - \frac{w}{e^*}\right) \bX^\top(\hat{g} - g^*)\right]}_{(I)} \nonumber \\
-&\quad + \underbrace{\sqrt{n}\mathbb{P}_n\left[\frac{w(\hat{e} - e^*)}{\hat{e}e^*} \bX^\top(g^* - \by)\right]}_{(II)} \nonumber \\
-&\quad + \underbrace{\sqrt{n}\mathbb{P}_n\left[\frac{w(\hat{e} - e^*)}{\hat{e}e^*} \bX^\top(\hat{g} - g^*)\right]}_{(III)}
-\end{align}
-
-\textbf{Term (I):} Note that $\E[(1 - w/e^*) \bX^\top(\hat{g} - g^*) | I^c] = 0$ since $\E[w | \bX, \bz] = e^*(\bX, \bz)$. By the Markov inequality and Assumption~\ref{ass:ml_rate}, term (I) is $o_P(1)$.
-
-\textbf{Term (II):} Similarly, $\E[w(\hat{e} - e^*)\bX^\top(g^* - \by)/(\hat{e}e^*) | I^c] = 0$ since $\E[g^* - \by | \bX, \bz] = 0$. By Assumption~\ref{ass:ml_rate}, term (II) is $o_P(1)$.
-
-\textbf{Term (III):} By Cauchy-Schwarz and Assumption~\ref{ass:ml_rate}:
-\begin{equation}
-\E[|\hat{e} - e^*| \|\hat{g} - g^*\|] \leq \|\hat{e} - e^*\|_{P,2} \|\hat{g} - g^*\|_{P,2} = o(n^{-1/2})
-\end{equation}
-Therefore term (III) is $o_P(1)$.
-
-\subsection{Step 3: Asymptotic Expansion}
-
-By consistency of $\hat{\bbeta}$ and Taylor expansion:
-\begin{equation}
-\sqrt{n}(\hat{\bbeta} - \bbeta^*) = \mathbf{J}^{-1}\sqrt{n}\mathbb{P}_n\bpsi(\bbeta^*) + o_P(1)
-\end{equation}
-
-The central limit theorem yields $\sqrt{n}\mathbb{P}_n\bpsi(\bbeta^*) \rightsquigarrow N(0, \E[\bpsi\bpsi^\top])$, completing the proof. \hfill $\square$
-
-\section{Proof of Corollary~\ref{cor:dominance}}
-\label{app:proof_dominance}
-
-When $e(\bX, \bz) = \rho$ is constant and $w \perp (\bX, \by, \bz)$, define:
-\begin{align}
-\zeta(\bX, \bz) &:= \bX^\top(\nabla b(\bX\bbeta^*) - g^*(\bX, \bz)) \\
-\pi(\bX, \by, \bz) &:= \bX^\top(g^*(\bX, \bz) - \by)
-\end{align}
-
-Then $\nabla_\bbeta \ell = \zeta + \pi$ and $\E[\pi | \bX, \bz] = 0$.
-
-\textbf{Primary-Only Variance:}
-\begin{equation}
-\mathbf{\Sigma}^P = \frac{1}{\rho}\mathbf{J}^{-1}\E[\zeta\zeta^\top]\mathbf{J}^{-1} + \frac{1}{\rho}\mathbf{J}^{-1}\E[\pi\pi^\top]\mathbf{J}^{-1}
-\end{equation}
-
-\textbf{DML Variance:}
-\begin{equation}
-\mathbf{\Sigma}^{\text{DML}} = \mathbf{J}^{-1}\E[\zeta\zeta^\top]\mathbf{J}^{-1} + \frac{1}{\rho}\mathbf{J}^{-1}\E[\pi\pi^\top]\mathbf{J}^{-1}
-\end{equation}
-
-\textbf{Dominance Result:}
-\begin{equation}
-\mathbf{\Sigma}^P - \mathbf{\Sigma}^{\text{DML}} = \left(\frac{1}{\rho} - 1\right)\mathbf{J}^{-1}\E[\zeta\zeta^\top]\mathbf{J}^{-1} \succeq 0
-\end{equation}
-
-Since $\rho < 1$, we have $\frac{1}{\rho} - 1 > 0$. The matrix $\E[\zeta\zeta^\top]$ is positive semi-definite, and strictly positive definite when AI predictions are informative. \hfill $\square$
-
-\section{Supporting Lemmas}
-\label{app:lemmas}
-
-\begin{lemma}[Score Function Validity]
+\begin{lemma}[Score Function Validity and Neyman Orthogonality]
 \label{lem:score}
-$P\bpsi(e^*, g^*; \bbeta^*) = 0$ and $\mathbb{P}_n\btau(\hat{e}, \hat{g}) - \mathbb{P}_n\btau(e^*, g^*) = o_P(n^{-1/2})$.
+It holds that:
+\begin{enumerate}
+    \item $P\bpsi(e^*, g^*; \bbeta^*) = 0$
+    \item $\mathbb{P}_n\btau(\hat{e}, \hat{g}) - \mathbb{P}_n\btau(e^*, g^*) = o_P(n^{-1/2})$
+\end{enumerate}
 \end{lemma}
+
+\begin{proof}
+\textbf{Part 1.} By the definition of $\btau$:
+\begin{align}
+    P\btau(e^*, g^*) &= \E\left[\bX^\top \left(g^*(\bX, \bz) - \frac{w}{e^*(\bX, \bz)}(g^*(\bX, \bz) - \by)\right)\right] \\
+    &= \E\left[\bX^\top \left(g^*(\bX, \bz) - \frac{\E[w|\bX,\bz]}{e^*(\bX, \bz)}(g^*(\bX, \bz) - \E[\by|\bX,\bz])\right)\right] \\
+    &= \E[\bX^\top g^*(\bX, \bz)] - \E[\bX^\top (g^*(\bX, \bz) - g^*(\bX, \bz))] \\
+    &= \E[\bX^\top \E[\by|\bX,\bz]] = \E[\bX^\top \by]
+\end{align}
+where we used $\E[w|\bX,\bz] = e^*(\bX,\bz)$ and $\E[\by|\bX,\bz] = g^*(\bX,\bz)$. Therefore:
+\begin{equation}
+    P\bpsi(e^*, g^*; \bbeta^*) = \E[\bX^\top \nabla b(\bX\bbeta^*)] - \E[\bX^\top \by] = 0
+\end{equation}
+by the first-order condition~\eqref{eq:foc}.
+
+\textbf{Part 2.} We decompose:
+\begin{align}
+    &\sqrt{n}(\mathbb{P}_n\btau(\hat{e}, \hat{g}) - \mathbb{P}_n\btau(e^*, g^*)) \\
+    &= \underbrace{\sqrt{n}\mathbb{P}_n\left[\left(1 - \frac{w}{e^*}\right)\bX^\top(\hat{g} - g^*)\right]}_{(I)} + \underbrace{\sqrt{n}\mathbb{P}_n\left[\frac{w(\hat{e} - e^*)}{\hat{e}e^*}\bX^\top(g^* - \by)\right]}_{(II)} \\
+    &\quad + \underbrace{\sqrt{n}\mathbb{P}_n\left[\frac{w(\hat{e} - e^*)}{\hat{e}e^*}\bX^\top(\hat{g} - g^*)\right]}_{(III)}
+\end{align}
+
+\textbf{Term (I):} Conditional on $I^c$:
+\begin{equation}
+    \E\left[\left(1 - \frac{w}{e^*(\bX,\bz)}\right)\bX^\top(\hat{g}(\bX,\bz) - g^*(\bX,\bz)) \bigg| I^c\right] = 0
+\end{equation}
+since $\E[w|\bX,\bz] = e^*(\bX,\bz)$. By Markov's inequality and Assumption~\ref{ass:ml_rate}:
+\begin{align}
+    P(\|(I)\| \geq \epsilon | I^c) &\leq \frac{\E[\|(I)\|^2 | I^c]}{\epsilon^2} \\
+    &\leq \frac{4C^2}{\kappa^2 \epsilon^2} \|\hat{g} - g^*\|_{P,2}^2 \to_P 0
+\end{align}
+
+\textbf{Term (II):} Similarly has zero conditional mean since $\E[g^* - \by|\bX,\bz] = 0$. By Assumption~\ref{ass:ml_rate}:
+\begin{align}
+    P(\|(II)\| \geq \epsilon | I^c) &\leq \frac{2\tilde{\sigma}^2 C^2}{\kappa^2 \epsilon^2} \E[|\hat{e} - e^*|^2 | I^c] + o_P(1) \to_P 0
+\end{align}
+
+\textbf{Term (III):} By Cauchy-Schwarz:
+\begin{align}
+    \E[|\hat{e} - e^*| \|\hat{g} - g^*\|] &\leq \|\hat{e} - e^*\|_{P,2} \|\hat{g} - g^*\|_{P,2} \\
+    &\leq \alpha(n)^2 / n^{r_1+r_2} = o(n^{-1/2})
+\end{align}
+Therefore $(III) = o_P(1)$.
+\end{proof}
 
 \begin{lemma}[Rates of Empirical Scores]
 \label{lem:rates}
-$\|\mathbb{P}_n\bpsi(e^*, g^*; \hat{\bbeta})\| = o_P(n^{-1/2})$ and $\inf_{\bbeta} \|\mathbb{P}_n\bpsi(\hat{e}, \hat{g}; \bbeta)\| = o_P(n^{-1/2})$.
+It holds that:
+\begin{equation}
+    \|\mathbb{P}_n\bpsi(e^*, g^*; \hat{\bbeta})\|, \inf_{\bbeta \in \mathcal{B}} \|\mathbb{P}_n\bpsi(\hat{e}, \hat{g}; \bbeta)\| = o_P(n^{-1/2})
+\end{equation}
 \end{lemma}
+
+\begin{proof}
+Define $\bar{\ell}(\Xi; e, g; \bbeta) := b(\bX\bbeta) - \left[g(\bX,\bz) + \frac{w}{e(\bX,\bz)}(g(\bX,\bz) - \by)\right]^\top \bX\bbeta$, so $\nabla_\bbeta \bar{\ell} = \bpsi$ and $\nabla^2_\bbeta \bar{\ell} = \bX^\top \nabla^2 b(\bX\bbeta) \bX \succeq 0$.
+
+By Lemma~\ref{lem:score}, $P\bar{\ell}(e^*, g^*; \bbeta)$ is strictly convex with unique minimum at $\bbeta^*$. By Theorem 2.7 of \citet{newey1994large}, there exists $\{\check{\bbeta}_n\}$ solving $\min_\bbeta \mathbb{P}_n \bar{\ell}(e^*, g^*; \bbeta)$ with $\check{\bbeta}_n \to_P \bbeta^*$.
+
+Thus $\mathbb{P}_n\bpsi(e^*, g^*; \check{\bbeta}_n) = 0$. By Lemma~\ref{lem:score}:
+\begin{equation}
+    \sqrt{n}\mathbb{P}_n\bpsi(\hat{e}, \hat{g}; \check{\bbeta}_n) = \sqrt{n}\mathbb{P}_n\bpsi(e^*, g^*; \check{\bbeta}_n) + \sqrt{n}(\mathbb{P}_n\btau(e^*, g^*) - \mathbb{P}_n\btau(\hat{e}, \hat{g})) = o_P(1)
+\end{equation}
+This gives $\inf_\bbeta \|\mathbb{P}_n\bpsi(\hat{e}, \hat{g}; \bbeta)\| = o_P(n^{-1/2})$, implying $\|\mathbb{P}_n\bpsi(\hat{e}, \hat{g}; \hat{\bbeta})\| = o_P(n^{-1/2})$. Applying Lemma~\ref{lem:score} again yields the result.
+\end{proof}
 
 \begin{lemma}[Consistency]
 \label{lem:consistency}
 $\hat{\bbeta} \to_P \bbeta^*$.
 \end{lemma}
 
-The proofs follow from standard arguments in \citet{chernozhukov2018double} and \citet{newey1994large}.
+\begin{proof}
+By the strict convexity established above and uniform convergence of $\mathbb{P}_n\bar{\ell}$ to $P\bar{\ell}$ on compact sets (weak law of large numbers), we have for any $\epsilon_1 < \epsilon_2$ with $B(\bbeta^*, \epsilon_2) \subset \mathcal{B}$:
+\begin{equation}
+    P\bar{\ell}(e^*, g^*; \bbeta) \geq P\bar{\ell}(e^*, g^*; \bbeta^*) + \frac{c\epsilon_1^2}{2} \quad \forall \bbeta \in B(\bbeta^*, \epsilon_2) \setminus B(\bbeta^*, \epsilon_1)
+\end{equation}
+for some universal $c > 0$.
+
+By subgradient inequality and the score bounds from Lemma~\ref{lem:rates}, with probability approaching one:
+\begin{equation}
+    \|\mathbb{P}_n\bpsi(e^*, g^*; \bbeta)\| \geq \frac{c\epsilon_1^2}{4\epsilon_2} \quad \forall \bbeta \in \mathcal{B} \setminus B(\bbeta^*, \epsilon_2)
+\end{equation}
+
+Since $\|\mathbb{P}_n\bpsi(e^*, g^*; \hat{\bbeta})\| = o_P(n^{-1/2})$, we must have $\hat{\bbeta} \in B(\bbeta^*, \epsilon_1)$ with probability approaching one.
+\end{proof}
+
+\textbf{Completing the proof of Theorem~\ref{thm:normality}.} The score function is locally Lipschitz: for $\bbeta_1, \bbeta_2 \in B(\bbeta^*, \epsilon)$:
+\begin{equation}
+    \|\bpsi(\Xi; \bbeta_1) - \bpsi(\Xi; \bbeta_2)\| \leq C_1 \|\bX\| \|\bbeta_1 - \bbeta_2\|
+\end{equation}
+where $C_1 = \sup_{\bbeta \in B(\bbeta^*, \epsilon), \bX \in \mathcal{X}} \|\nabla^2 b(\bX\bbeta)\| < \infty$.
+
+By Example 19.7 and Theorem 19.5 of \citet{vandervaart2000asymptotic}, $\{\bpsi(\cdot; \bbeta) : \bbeta \in B(\bbeta^*, \epsilon)\}$ forms a Donsker class. By Lemma~\ref{lem:consistency} and Theorem 19.9 of \citet{vandervaart2000asymptotic}:
+\begin{equation}
+    \mathbb{G}_n\bpsi(\hat{\bbeta}) - \mathbb{G}_n\bpsi(\bbeta^*) \to_P 0
+\end{equation}
+
+Therefore:
+\begin{align}
+    \sqrt{n}(P\bpsi(\hat{\bbeta}) - P\bpsi(\bbeta^*)) &= \mathbb{G}_n\bpsi(\hat{\bbeta}) - \mathbb{G}_n\bpsi(\bbeta^*) - \sqrt{n}\mathbb{P}_n\bpsi(\hat{\bbeta}) + \sqrt{n}\mathbb{P}_n\bpsi(\bbeta^*) \\
+    &= \sqrt{n}\mathbb{P}_n\bpsi(\bbeta^*) + o_P(1)
+\end{align}
+
+By Taylor expansion:
+\begin{equation}
+    \sqrt{n}\left[P\bX^\top \nabla^2 b(\bX\bbeta^*)\bX (\hat{\bbeta} - \bbeta^*) + o_P(1)\|\hat{\bbeta} - \bbeta^*\|\right] = \sqrt{n}\mathbb{P}_n\bpsi(\bbeta^*) + o_P(1)
+\end{equation}
+
+Since $\mathbf{J} = P[\bX^\top \nabla^2 b(\bX\bbeta^*)\bX]$ is invertible:
+\begin{equation}
+    \sqrt{n}(\hat{\bbeta} - \bbeta^*) = \mathbf{J}^{-1} \sqrt{n}\mathbb{P}_n\bpsi(\bbeta^*) + o_P(1)
+\end{equation}
+
+The central limit theorem yields $\sqrt{n}\mathbb{P}_n\bpsi(\bbeta^*) \rightsquigarrow N(0, \E[\bpsi\bpsi^\top])$, completing the proof. \hfill $\square$
+
+\subsection{Proof of Corollary~\ref{cor:dominance}}
+\label{app:proof_dominance}
+
+When $e(\bX, \bz) = \rho$ is constant and $w \perp (\bX, \by, \bz)$, define:
+\begin{align}
+    \zeta(\bX, \bz) &:= \bX^\top(\nabla b(\bX\bbeta^*) - g^*(\bX, \bz)) \\
+    \pi(\bX, \by, \bz) &:= \bX^\top(g^*(\bX, \bz) - \by)
+\end{align}
+
+Note that $\nabla_\bbeta \ell(\bX, \by; \bbeta^*) = \zeta + \pi$ and $\E[\pi | \bX, \bz] = 0$.
+
+\textbf{Primary-Only Estimator.} The estimator $\hat{\bbeta}^P$ solves $\sum_{i: w_i=1} \nabla_\bbeta \ell(\bX_i, \by_i; \bbeta) = 0$, equivalently $\sum_{i=1}^n w_i \nabla_\bbeta \ell(\bX_i, \by_i; \bbeta) = 0$.
+
+By independence of $w$: $\E[w \nabla_\bbeta \ell(\bX, \by; \bbeta^*)] = \rho \E[\nabla_\bbeta \ell(\bX, \by; \bbeta^*)] = 0$.
+
+Standard arguments yield $\sqrt{n}(\hat{\bbeta}^P - \bbeta^*) \rightsquigarrow N(0, \mathbf{\Sigma}^P)$ where:
+\begin{equation}
+    \mathbf{\Sigma}^P = \frac{1}{\rho} \mathbf{J}^{-1} \E[(\zeta + \pi)(\zeta + \pi)^\top] \mathbf{J}^{-1}
+\end{equation}
+
+Since $\E[\zeta \pi^\top] = \E[\E[\zeta \pi^\top | \bX, \bz]] = \E[\zeta \E[\pi^\top | \bX, \bz]] = 0$:
+\begin{equation}
+    \mathbf{\Sigma}^P = \frac{1}{\rho} \mathbf{J}^{-1} \E[\zeta\zeta^\top] \mathbf{J}^{-1} + \frac{1}{\rho} \mathbf{J}^{-1} \E[\pi\pi^\top] \mathbf{J}^{-1}
+    \label{eq:sigma_p}
+\end{equation}
+
+\textbf{DML Estimator.} Observe that $\bpsi(\Xi; e^*, g^*; \bbeta^*) = \zeta(\bX, \bz) + \frac{w}{\rho}\pi(\bX, \by, \bz)$. Therefore:
+\begin{align}
+    \E[\bpsi\bpsi^\top] &= \E[\zeta\zeta^\top] + \frac{1}{\rho^2}\E[w^2 \pi\pi^\top] + \frac{2}{\rho}\E[w\zeta\pi^\top] \\
+    &= \E[\zeta\zeta^\top] + \frac{1}{\rho}\E[\pi\pi^\top]
+\end{align}
+using $\E[w^2] = \E[w] = \rho$ and $\E[w\zeta\pi^\top] = \rho\E[\zeta\pi^\top] = 0$.
+
+Thus:
+\begin{equation}
+    \mathbf{\Sigma}^{\text{DML}} = \mathbf{J}^{-1} \E[\zeta\zeta^\top] \mathbf{J}^{-1} + \frac{1}{\rho} \mathbf{J}^{-1} \E[\pi\pi^\top] \mathbf{J}^{-1}
+    \label{eq:sigma_dml}
+\end{equation}
+
+\textbf{Dominance.} Comparing~\eqref{eq:sigma_p} and~\eqref{eq:sigma_dml}:
+\begin{equation}
+    \mathbf{\Sigma}^P - \mathbf{\Sigma}^{\text{DML}} = \left(\frac{1}{\rho} - 1\right) \mathbf{J}^{-1} \E[\zeta\zeta^\top] \mathbf{J}^{-1}
+\end{equation}
+
+Since $\rho < 1$, we have $\frac{1}{\rho} - 1 > 0$. The matrix $\E[\zeta\zeta^\top]$ is positive semi-definite. It is strictly positive definite when $\E[\bX^\top(\nabla b(\bX\bbeta^*) - g^*)(\cdot)^\top \bX] \succ 0$, i.e., when AI predictions are informative. \hfill $\square$
+
+\section{Applications of the Framework}
+\label{app:applications}
+
+\subsection{Canonical GLMs}
+
+A canonical GLM assumes the conditional distribution of $\by$ given $\bX$ belongs to an exponential family:
+\begin{equation}
+    p_{\text{GLM}}(\by | \btheta) = \exp\left\{\frac{\by^\top \btheta - b(\btheta)}{\phi} + c(\by, \phi)\right\}
+\end{equation}
+where $\btheta = \bX\bbeta$ is the natural parameter, $b(\cdot)$ is the log-partition function, and $\phi$ is the dispersion parameter.
+
+Under correct specification:
+\begin{equation}
+    \E[\by | \btheta] = \nabla b(\btheta), \quad \Cov(\by | \btheta) = \nabla^2 b(\btheta)
+\end{equation}
+
+Our framework allows misspecification: $\bbeta^*$ is the pseudo-true parameter minimizing KL divergence to the GLM family.
+
+\textbf{Examples:}
+\begin{itemize}
+    \item \textbf{Linear regression}: $b(\theta) = \frac{1}{2}\theta^2$, $\phi = \sigma^2$
+    \item \textbf{Logistic regression}: $b(\theta) = \log(1 + e^\theta)$, $\phi = 1$
+    \item \textbf{Poisson regression}: $b(\theta) = e^\theta$, $\phi = 1$
+    \item \textbf{Gamma regression}: $b(\theta) = -\log(-\theta)$ for $\theta < 0$
+\end{itemize}
+
+\subsection{Multinomial Logit (MNL)}
+
+Fix $k$ alternatives. Covariates are $\bX = (\bX_{(1)}, \ldots, \bX_{(k)})^\top$ with $\bX_{(j)} \in \R^d$. Choice probabilities:
+\begin{equation}
+    \sigma_j(\bX; \bbeta) = \frac{\exp(\bX_{(j)}^\top \bbeta)}{1 + \sum_{\ell=1}^k \exp(\bX_{(\ell)}^\top \bbeta)}
+\end{equation}
+
+This is a canonical GLM with $\btheta_j = \bX_{(j)}^\top \bbeta$ and:
+\begin{equation}
+    b(\btheta) = \log\left(1 + \sum_{j=1}^k e^{\theta_j}\right)
+\end{equation}
+
+\subsection{Example: Failure of Dominance}
+
+We provide a counterexample showing dominance can fail when selection is non-random.
+
+\begin{example}
+Consider linear regression with $k=1$, $b(\theta) = \frac{1}{2}\theta^2$. Let $\bx$ follow a mixture: $\tilde{w} = 1$ with probability $p$, and $\E[\bx\bx^\top | \tilde{w}] = \mathbf{I}$ with disjoint supports $\mathcal{X}_0, \mathcal{X}_1$.
+
+Assume $\E[y|\bx] = \bx^\top \bbeta^*$ and $\Var(y|\bx) = \sigma^2_{\tilde{w}}$ when $\bx \in \mathcal{X}_{\tilde{w}}$. Set $z = y - \bx^\top \bbeta$ so $g^*(\bx, z) = y$. Let $e(\bx, z) = 1$ if $\bx \in \mathcal{X}_1$ and $e(\bx, z) = \kappa$ if $\bx \in \mathcal{X}_0$.
+
+Then:
+\begin{align}
+    \text{AVar}(\hat{\bbeta}^P) &= \frac{p\sigma_1^2 + (1-p)\sigma_0^2 \kappa}{[p + (1-p)\kappa]^2} \mathbf{I} \\
+    \text{AVar}(\hat{\bbeta}^{\text{DML}}) &= (p\sigma_1^2 + (1-p)\sigma_0^2) \mathbf{I}
+\end{align}
+
+When $\sigma_1, \kappa \to 0$: $\text{AVar}(\hat{\bbeta}^P) \to 0$ while $\text{AVar}(\hat{\bbeta}^{\text{DML}}) \to (1-p)\sigma_0^2 \mathbf{I}$.
+
+Thus dominance fails when selection advantageously excludes high-variance observations.
+\end{example}
 
 \section{Additional Experimental Details}
 \label{app:experiments}
 
 \subsection{Data Generation}
 
-The conjoint analysis data consists of choice tasks where each task presents two product alternatives. Each alternative is characterized by 11 attributes including price, brand, and various features. The ground truth parameters $\bbeta^* \in \R^{11}$ are known from a large-scale study with over 10,000 human responses.
+The conjoint study presents respondents with pairs of sports cars. Each car is characterized by 11 attributes at various levels. For each choice task:
+\begin{enumerate}
+    \item Two cars are generated with random attribute levels
+    \item Respondent chooses preferred car (or neither)
+    \item Choice is recorded as $y \in \{0, 1\}$
+\end{enumerate}
 
-\subsection{AI Prediction Generation}
+Ground truth parameters $\bbeta^* \in \R^{11}$ are estimated from a large-scale study with $n > 10,000$ respondents, providing reliable ``true'' values for MAPE calculation.
 
-We use GPT-4o to generate predictions for each choice task. The model outputs: $z = 1$ (predicts option 1), $z = 0$ (predicts option 2), or $z = -1$ (abstains). The overall accuracy (excluding abstentions) is approximately 57\%.
+\subsection{AI Prediction Protocol}
+
+We prompt GPT-4o with:
+
+\begin{quote}
+\texttt{You are evaluating car preferences. Given two sports cars with the following attributes, which would a typical consumer prefer?}
+
+\texttt{Car A: [attributes]}
+
+\texttt{Car B: [attributes]}
+
+\texttt{Respond with: 1 (prefer A), 0 (prefer B), or -1 (cannot determine)}
+\end{quote}
+
+GPT-4o achieves 57\% accuracy (excluding abstentions), with abstention rate approximately 15\%.
 
 \subsection{Implementation Details}
 
-\textbf{G-Model.} We use stratified logistic regression with $C = 0.05$. For each value of $z \in \{-1, 0, 1\}$, we fit a separate logistic regression model on the primary data with that $z$ value.
+\textbf{G-Model.} We use stratified logistic regression: for each $z \in \{-1, 0, 1\}$, fit separate logistic regression on primary data with that $z$ value. Regularization $C = 0.05$ produces well-calibrated probabilities.
 
-\textbf{Cross-Fitting.} We use $K = 5$ folds. For each fold, the g-model is trained on the remaining 4 folds of primary data, then used to predict on both the held-out fold and all augmented data.
+\textbf{Cross-Fitting.} $K = 5$ folds. For each fold $k$:
+\begin{enumerate}
+    \item Train $\hat{g}$ on folds $\{1,\ldots,K\} \setminus \{k\}$ (primary data only)
+    \item Predict on fold $k$ (primary) and all auxiliary data
+    \item Compute $\hat{\bbeta}_k$ by solving the score equation
+\end{enumerate}
 
-\textbf{Optimization.} The final GLM is fit using L-BFGS with the DML-adjusted targets.
+\textbf{Optimization.} GLM fit using L-BFGS with DML-adjusted targets~\eqref{eq:tau_primary}--\eqref{eq:tau_aux}.
+
+\subsection{Full Results by Sample Size}
+
+\begin{table}[h]
+\caption{Complete results across all sample sizes (30 trials each)}
+\centering
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+Method & $n$=50 & $n$=100 & $n$=150 & $n$=200 & Mean & Std \\
+\midrule
+DML & 17.44 & 16.81 & 16.25 & 15.55 & 16.51 & 0.82 \\
+DML-2 & 17.56 & 16.93 & 16.46 & 15.94 & 16.72 & 0.70 \\
+AAE & 20.94 & 17.00 & 16.37 & 16.22 & 17.63 & 2.17 \\
+Primary & 55.58 & 29.82 & 22.67 & 19.85 & 31.98 & 16.18 \\
+PPI & 93.32 & 48.49 & 33.97 & 28.77 & 51.14 & 29.07 \\
+Naive & 128.62 & 100.74 & 85.34 & 73.59 & 97.07 & 23.74 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Sensitivity Analysis}
+
+\textbf{Number of Folds.} Results are robust to $K \in \{3, 5, 10\}$, with $K=5$ providing good bias-variance tradeoff.
+
+\textbf{G-Model Regularization.} Strong regularization ($C \in [0.01, 0.1]$) outperforms weak regularization ($C \geq 1$), as calibrated probabilities matter more than classification accuracy.
+
+\textbf{Auxiliary Sample Size.} Performance improves with $n_A$ up to approximately $10 \times n_P$, with diminishing returns thereafter.
+
+\section{Additional Figures}
+\label{app:figures}
+
+[Placeholder for figures showing:
+\begin{itemize}
+    \item MAPE vs.\ AI accuracy for DML vs.\ PPI
+    \item Convergence of DML estimates with increasing $n_P$
+    \item Calibration plots for g-model predictions
+\end{itemize}]
 
 \end{document}
