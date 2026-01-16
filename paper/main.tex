@@ -87,7 +87,7 @@ $^3$W.P.\ Carey School of Business, Arizona State University\\[0.3em]
 %============================================================================
 \begin{minipage}{0.92\textwidth}
 \textbf{Abstract.}
-The proliferation of large language models (LLMs) has created unprecedented opportunities for augmenting scarce human-labeled data with AI-generated annotations. However, existing approaches face fundamental limitations: naive pooling introduces systematic bias, while Prediction-Powered Inference (PPI) assumes AI outputs serve as direct proxies for outcomes---an assumption violated when AI accuracy is moderate. We propose a Double Machine Learning (DML) framework for AI data augmentation in Generalized Linear Models that treats AI predictions as \textit{informative features} rather than outcome surrogates. Our approach constructs Neyman-orthogonal score functions that remain computable even when human labels are missing, enabling valid statistical inference while leveraging both primary (human-labeled) and auxiliary (AI-augmented) data. We establish asymptotic normality and prove that our estimator \textit{dominates} the primary-data-only estimator under random selection, achieving strictly smaller asymptotic variance when AI predictions are informative. Extensive experiments on conjoint analysis with GPT-4o annotations demonstrate that DML reduces estimation error by 48\% compared to primary-only estimation (equivalent to \$2.41 in willingness-to-pay accuracy per attribute), while PPI fails catastrophically with 394\% MAPE due to violated assumptions.
+The proliferation of large language models (LLMs) has created unprecedented opportunities for augmenting scarce human-labeled data with AI-generated annotations. However, existing approaches face fundamental limitations: naive pooling introduces systematic bias, while Prediction-Powered Inference (PPI) corrects for prediction error but requires AI outputs to directly approximate outcomes---a condition violated when AI predictions are categorical or accuracy is moderate. We propose a Double Machine Learning (DML) framework for AI data augmentation in Generalized Linear Models that treats AI predictions as \textit{informative features} rather than outcome surrogates. Our approach constructs Neyman-orthogonal score functions that remain computable even when human labels are missing, enabling valid statistical inference while leveraging both primary (human-labeled) and auxiliary (AI-augmented) data. We establish asymptotic normality and prove that, \textit{under random selection into the primary sample}, our estimator dominates the primary-data-only estimator, achieving strictly smaller asymptotic variance when AI predictions are informative. Experiments on conjoint analysis with GPT-4o annotations demonstrate that DML achieves 16.5\% MAPE, outperforming primary-only estimation (32.0\%), the state-of-the-art AAE method (17.6\%), and PPI (51.1\%), which struggles when its proxy assumption is violated.
 \end{minipage}
 \vskip 1.5em
 \end{center}
@@ -129,13 +129,13 @@ The \textit{Assumption-lean and Data-adaptive} (AAE) framework \citep{wang2024ll
 \label{sec:related}
 %============================================================================
 
-\textbf{Prediction-Powered Inference.} \citet{angelopoulos2023prediction} introduced PPI for constructing valid confidence intervals using ML predictions. The key insight is that labeled data can correct for systematic prediction errors. However, PPI assumes predictions directly approximate outcomes. When this fails---as with categorical AI outputs or moderate accuracy---PPI's variance correction can explode. Our framework instead learns $g(\bX,\bz) = \E[\by|\bX,\bz]$, using $\bz$ as a conditioning variable rather than assuming $\bz \approx \by$.
+\textbf{Prediction-Powered Inference.} \citet{angelopoulos2023prediction} introduced PPI for constructing valid confidence intervals by leveraging ML predictions on unlabeled data. PPI uses labeled data to estimate and correct for the bias in predictions, yielding valid inference when predictions are reasonably accurate proxies for outcomes. When predictions are continuous and well-calibrated, PPI achieves substantial efficiency gains. However, PPI's variance reduction depends on prediction quality: the correction term $\hat{\theta}_{\text{rect}} = \frac{1}{n}\sum_{i \in \text{labeled}}(f(X_i) - Y_i)$ has variance that grows when predictions poorly approximate outcomes. In our setting, AI outputs are categorical ($z \in \{-1,0,1\}$) rather than continuous probability estimates, violating the implicit assumption that $z$ and $y$ live in the same space. Our framework instead treats $z$ as a \textit{feature} for predicting $\E[y|X,z]$, which remains valid regardless of AI accuracy.
 
-\textbf{Double Machine Learning.} \citet{chernozhukov2018double} developed DML for causal inference with high-dimensional nuisance parameters. The Neyman orthogonality condition ensures that estimation error in nuisance functions has only second-order effects on the target parameter. We adapt this framework to the AI augmentation setting, where the nuisance function $g(\bX,\bz) = \E[\by|\bX,\bz]$ captures the information content of AI predictions.
+\textbf{Double Machine Learning and Doubly Robust Estimation.} \citet{chernozhukov2018double} developed DML for causal inference with high-dimensional nuisance parameters, building on the doubly robust estimation literature \citep{bang2005doubly, robins1994estimation}. The Neyman orthogonality condition ensures that estimation error in nuisance functions has only second-order effects on target parameters. Our score function (Equation~\ref{eq:score}) shares the doubly robust structure: it remains consistent if either $e$ or $g$ is correctly specified, though we require both for efficiency. \citet{kennedy2022semiparametric} provides a comprehensive review of these connections.
 
-\textbf{Semi-Supervised and Transfer Learning.} Classical semi-supervised methods \citep{chapelle2006semi, zhu2009introduction} use unlabeled features to improve prediction. Transfer learning \citep{pan2009survey, weiss2016survey} addresses distribution shift between domains. Our setting is distinct: we have AI-generated \textit{labels} (not just features) for auxiliary data, but these labels may be systematically biased. The AAE framework \citep{wang2024llm} addresses this through parametric debiasing; we provide a nonparametric alternative.
+\textbf{Semi-Supervised and Transfer Learning.} Classical semi-supervised methods \citep{chapelle2006semi, zhu2009introduction} use unlabeled features to improve prediction. Transfer learning \citep{pan2009survey, weiss2016survey} addresses distribution shift between domains. Our setting is distinct: we have AI-generated \textit{labels} (not just features) for auxiliary data, but these labels may be systematically biased. The AAE framework \citep{wang2024llm} addresses this through parametric debiasing; we provide a nonparametric alternative that can capture complex, heterogeneous relationships between AI and human responses.
 
-\textbf{Missing Data.} Our framework connects to missing data theory \citep{little2019statistical, rubin1976inference}, where human labels are ``missing'' for auxiliary observations. The key distinction is that we observe AI predictions $\bz$ for all observations, providing rich auxiliary information beyond the missingness indicator.
+\textbf{Missing Data.} Our framework connects to missing data theory \citep{little2019statistical, rubin1976inference}, where human labels are ``missing'' for auxiliary observations. The inverse probability weighting term $w/e$ in our score function mirrors classical IPW estimators \citep{robins1994estimation}, while the $g$ function provides augmentation analogous to AIPW \citep{scharfstein1999adjusting}. The key distinction is that we observe AI predictions $\bz$ for all observations, providing rich auxiliary information beyond the missingness indicator.
 
 %============================================================================
 \section{Problem Formulation}
@@ -214,6 +214,8 @@ We propose the score function:
     \item \textbf{Neyman Orthogonality}: The pathwise derivative of $\E[\bpsi]$ with respect to $(e,g)$ vanishes at $(e^*, g^*)$, ensuring robustness to nuisance estimation error.
 \end{enumerate}
 
+\textbf{Technical Novelty.} While our estimator builds on the DML framework of \citet{chernozhukov2018double}, several aspects are specific to the AI augmentation setting: (i) the score function~\eqref{eq:score} is constructed to handle \textit{partially observed outcomes}---standard DML assumes $y$ is always observed; (ii) the nuisance function $g(X,z) = \E[y|X,z]$ explicitly incorporates AI predictions as conditioning variables, enabling nonparametric learning of the AI-human relationship; (iii) our dominance result (Corollary~\ref{cor:dominance}) characterizes precisely when augmented data improves efficiency, which is novel to this setting. The key conceptual contribution is recognizing that AI predictions should enter as \textit{features} in $g(\cdot)$, not as direct outcome proxies.
+
 \subsection{Intuition: DML-Adjusted Targets}
 
 Setting the score to zero and solving for effective targets $\tau$ yields:
@@ -230,17 +232,18 @@ For primary data, the target blends the model prediction $g$ with the debiased h
 \caption{DML for AI-Augmented GLMs}
 \label{alg:dml}
 \begin{algorithmic}[1]
-\REQUIRE Data $\mathcal{D}$, folds $K$
-\STATE Partition $\mathcal{D}$ into $K$ folds $I_1, \ldots, I_K$
+\REQUIRE Data $\mathcal{D}$, number of folds $K$
+\STATE Partition primary data $\mathcal{D}^P$ into $K$ folds $I_1, \ldots, I_K$
 \FOR{$k = 1, \ldots, K$}
-    \STATE Train $\hat{e}, \hat{g}$ on $\mathcal{D} \setminus I_k$ (primary data only for $\hat{g}$)
-    \STATE Solve for $\hat{\bbeta}_k$: $\left\|\frac{1}{|I_k|}\sum_{i \in I_k} \bpsi(\Xi_i; \hat{e}, \hat{g}; \hat{\bbeta}_k)\right\| \leq \inf_\bbeta \|\cdot\| + o_P(n^{-1/2})$
+    \STATE Train $\hat{g}$ on primary data $\mathcal{D}^P \setminus I_k$ using logistic regression
+    \STATE Compute DML targets: $\hat{\tau}_i = \hat{g}(X_i, z_i)(1 - 1/\hat{e}) + w_i y_i/\hat{e}$ for all $i$
+    \STATE Fit GLM: $\hat{\bbeta}_k = \arg\min_{\bbeta} \sum_{i \in I_k \cup \mathcal{D}^A} [b(\bX_i\bbeta) - \hat{\tau}_i^\top \bX_i\bbeta]$
 \ENDFOR
 \RETURN $\hat{\bbeta} = \frac{1}{K}\sum_{k=1}^K \hat{\bbeta}_k$
 \end{algorithmic}
 \end{algorithm}
 
-Cross-fitting (Step 3) ensures that nuisance estimates $\hat{e}, \hat{g}$ are independent of the data used for inference in each fold, which is essential for valid asymptotic theory.
+\textbf{Implementation Notes.} Step 3 trains $\hat{g}$ on primary data excluding fold $k$, ensuring out-of-sample predictions. Under random selection, $\hat{e} = n_P/(n_P + n_A)$ is constant (no model needed). Step 5 fits a standard GLM with DML-adjusted targets $\hat{\tau}$, solvable by any convex optimizer.
 
 \subsection{Simplification Under Random Selection}
 
@@ -304,6 +307,20 @@ with strict inequality when $\rho < 1$ and $\E[\bX^\top(\nabla b(\bX\bbeta^*) - 
 
 The proof (Appendix~\ref{app:proof_dominance}) decomposes the variance into two terms: one depending on $\zeta = \bX^\top(\nabla b - g^*)$ (model-prediction error) and one on $\pi = \bX^\top(g^* - \by)$ (irreducible noise). DML reduces the first term by factor $\rho$ through auxiliary data, while the second remains unchanged.
 
+\begin{remark}[When Dominance Fails]
+\label{rem:dominance_fail}
+The dominance result requires random selection ($w \perp (X,y,z)$). When selection is informative---e.g., human labels are preferentially collected for ``hard'' cases where AI is uncertain---the primary-only estimator may achieve lower variance by focusing on high-information observations. Appendix~\ref{app:applications} provides a formal counterexample. In practice, dominance holds when primary data collection follows a designed sampling scheme rather than adaptive selection.
+\end{remark}
+
+\subsection{Variance Estimation}
+
+For inference, we estimate the asymptotic variance using the plug-in principle:
+\begin{equation}
+    \hat{\mathbf{\Sigma}} = \hat{\mathbf{J}}^{-1} \left(\frac{1}{n}\sum_{i=1}^n \hat{\bpsi}_i \hat{\bpsi}_i^\top\right) \hat{\mathbf{J}}^{-1}
+    \label{eq:var_est}
+\end{equation}
+where $\hat{\mathbf{J}} = \frac{1}{n}\sum_{i=1}^n \bX_i^\top \nabla^2 b(\bX_i\hat{\bbeta})\bX_i$ and $\hat{\bpsi}_i = \bpsi(\Xi_i; \hat{e}, \hat{g}; \hat{\bbeta})$. Standard errors for $\hat{\beta}_j$ are then $\text{SE}(\hat{\beta}_j) = \sqrt{\hat{\Sigma}_{jj}/n}$, enabling construction of confidence intervals and hypothesis tests.
+
 %============================================================================
 \section{Experiments}
 \label{sec:experiments}
@@ -316,14 +333,14 @@ Conjoint analysis is a foundational method in marketing for measuring consumer p
 \textbf{Data.} Following \citet{wang2024llm}, we use a sports car conjoint study with 11 attributes (Table~\ref{tab:attributes}). Each choice task presents two cars; respondents select their preferred option. The ground truth parameters $\bbeta^* \in \R^{11}$ are estimated from a large-scale study ($n > 10,000$).
 
 \begin{table}[t]
-\caption{Sports car conjoint attributes and ground truth part-worths (willingness-to-pay in \$1000s relative to base level)}
+\caption{Sports car conjoint attributes. WTP values are illustrative, computed as $\beta^* / \beta_{\text{price}}$ to convert utility units to dollars; actual magnitudes depend on the price coefficient normalization.}
 \label{tab:attributes}
 \vskip 0.1in
 \centering
 \small
 \begin{tabular}{@{}lcc@{}}
 \toprule
-Attribute & Levels & $\beta^*$ (WTP) \\
+Attribute & Levels & WTP (illustrative) \\
 \midrule
 Body Style & Coupe/Convert. & \$4.2K \\
 Transmission & Auto/Manual & \$1.8K \\
@@ -341,7 +358,7 @@ Price & \$35K--\$65K & ---\\
 \vskip -0.1in
 \end{table}
 
-\textbf{AI Predictions.} We prompt GPT-4o with each choice task and record its prediction $z \in \{-1, 0, 1\}$: choose option 1 ($z=1$), choose option 2 ($z=0$), or abstain ($z=-1$). GPT-4o achieves 57\% accuracy (excluding abstentions), reflecting the genuine difficulty of predicting human preferences.
+\textbf{AI Predictions.} We prompt GPT-4o with each choice task and record its prediction $z \in \{-1, 0, 1\}$: choose option 1 ($z=1$), choose option 2 ($z=0$), or abstain ($z=-1$). GPT-4o achieves 57\% accuracy (excluding abstentions). This modest accuracy---only 7 percentage points above random guessing---reflects the genuine difficulty of predicting heterogeneous human preferences: individual respondents weight attributes differently based on unobserved factors (budget constraints, lifestyle, taste), making aggregate prediction inherently challenging even for state-of-the-art LLMs. This low-accuracy regime is precisely where methods assuming $z \approx y$ struggle, making it a stringent test of our approach.
 
 \textbf{Experimental Design.} We vary primary sample size $n_P \in \{50, 100, 150, 200\}$ with fixed $n_A = 1000$ auxiliary observations. Each configuration runs 30 trials with identical random seeds across methods for fair comparison.
 
@@ -414,11 +431,11 @@ With average true WTP of \$3.5K per attribute, DML's 16.5\% MAPE translates to \
 
 The key difference lies in how each method uses AI predictions:
 
-\begin{itemize}
-    \item \textbf{PPI}: Assumes $\bz \approx \by$ and corrects for $\bz - \by$ using labeled data. When AI accuracy is low, the correction term has high variance.
+\textbf{PPI's Approach.} PPI constructs a ``rectified'' estimator by correcting for prediction error: $\hat{\theta}_{\text{PPI}} = \hat{\theta}_{\text{unlabeled}}(z) + \frac{1}{n_P}\sum_{i \in \mathcal{D}^P}(y_i - z_i)$. This assumes $z$ and $y$ are comparable quantities. The variance of the correction term is $\Var(y - z)/n_P$, which \textit{increases} when predictions are poor. In our setting: (i) $z \in \{-1, 0, 1\}$ is categorical while $y \in \{0, 1\}$ is binary, violating type compatibility; (ii) with 57\% accuracy, $\Var(y - z)$ is large, inflating the correction variance.
 
-    \item \textbf{DML}: Learns $g(\bX, \bz) = \E[\by | \bX, \bz]$, treating $\bz$ as a feature. Even when $\bz$ poorly predicts $\by$ marginally, it may be informative conditionally---e.g., GPT-4o may systematically prefer certain attribute combinations, providing signal about human preferences.
-\end{itemize}
+\textbf{DML's Approach.} DML learns $g(\bX, \bz) = \E[\by | \bX, \bz]$, treating $\bz$ as a feature rather than assuming $\bz \approx \by$. The relationship between $z$ and $y$ is learned from data, allowing arbitrary mappings. Even when $z$ poorly predicts $y$ marginally, $g(\bX, z)$ can exploit \textit{conditional} patterns---e.g., GPT-4o may systematically favor luxury features, providing signal about preferences for certain consumer segments.
+
+\textbf{When Does PPI Work Well?} PPI is effective when AI predictions are continuous, well-calibrated probabilities close to true outcomes. In classification with $z = P(y=1|X)$ and high accuracy, PPI achieves substantial variance reduction. Our setting violates this: GPT-4o outputs discrete choices, not calibrated probabilities.
 
 Figure~\ref{fig:comparison} (Appendix~\ref{app:figures}) shows that DML's advantage grows as AI accuracy decreases, while PPI degrades rapidly below 70\% accuracy.
 
