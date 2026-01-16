@@ -18,8 +18,11 @@ Implementation of the Double Machine Learning (DML) estimator from:
 | AAE | 21.2 | 17.3 | 16.3 | 16.3 | 17.8 | 3rd |
 | Primary Only | 49.2 | 29.3 | 22.3 | 20.9 | 30.4 | 4th |
 | Naive | 54.8 | 52.3 | 49.9 | 47.2 | 51.1 | 5th |
+| PPI | 546.1 | 383.3 | 331.5 | 302.9 | 391.0 | 6th |
 
-*Results with n_aug=1000. DML/DML-2/Primary: 30 trials. AAE/Naive: 20 trials.*
+*Results with n_aug=1000. DML/DML-2/Primary: 30 trials. AAE/Naive/PPI: 20 trials.*
+
+**Note on PPI:** Prediction-Powered Inference (Angelopoulos et al. 2023) is designed for a different inference setting where AI predictions serve as a direct proxy for the outcome. In our GLM augmentation setting, where AI labels have a different structure (z ∈ {-1, 0, 1} vs binary y), PPI's assumptions are violated, leading to poor performance.
 
 ### Improvement Summary
 
@@ -29,6 +32,7 @@ Implementation of the Double Machine Learning (DML) estimator from:
 | DML vs Naive | **+34.3%** | Doesn't blindly trust AI labels |
 | DML vs AAE | **+1.0%** | Cross-fitting + debiasing correction |
 | DML vs DML-2 | **+0.1%** | Essentially equivalent |
+| DML vs PPI | **+374.2%** | PPI not designed for GLM augmentation |
 
 ### DML vs DML-2 Comparison (30 trials)
 
@@ -356,3 +360,4 @@ pip install numpy torch scikit-learn
 | 3rd | AAE | 17.8% | +1.0% |
 | 4th | Primary Only | 30.4% | +13.6% |
 | 5th | Naive | 51.1% | +34.3% |
+| 6th | PPI | 391.0% | +374.2% |
