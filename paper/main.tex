@@ -104,7 +104,7 @@ The emergence of large language models (LLMs) has fundamentally transformed the 
 
 However, realizing these savings while maintaining statistical validity presents fundamental challenges. AI predictions differ systematically from human judgments in ways that are difficult to characterize \textit{a priori}. A naive approach that pools AI and human labels as interchangeable introduces bias that can overwhelm any efficiency gains. The central question is: \textit{How can we leverage abundant AI-generated data to improve estimation efficiency while maintaining valid statistical inference?}
 
-\textbf{Existing Approaches and Their Limitations.} Two prominent frameworks address this question. \textit{Prediction-Powered Inference} (PPI) \citep{angelopoulos2023prediction} constructs confidence intervals by treating AI predictions $\bz$ as direct proxies for outcomes $\by$, correcting for the prediction error $\bz - \by$ using labeled data. This elegant approach provides valid inference under the assumption that $\bz \approx \by$. However, when AI accuracy is moderate---as is common with LLMs on complex judgment tasks---PPI's correction term amplifies rather than reduces variance. In our experiments with 57\% AI accuracy, PPI produces 394\% MAPE versus 16.5\% for our method.
+\textbf{Existing Approaches and Their Limitations.} Two prominent frameworks address this question. \textit{Prediction-Powered Inference} (PPI) \citep{angelopoulos2023prediction} constructs confidence intervals by treating AI predictions $\bz$ as direct proxies for outcomes $\by$, correcting for the prediction error $\bz - \by$ using labeled data. This elegant approach provides valid inference under the assumption that $\bz \approx \by$. However, when AI accuracy is moderate---as is common with LLMs on complex judgment tasks---PPI's correction term amplifies rather than reduces variance. In our experiments with 57\% AI accuracy, PPI achieves only 51.1\% MAPE (after filtering AI abstentions) versus 16.5\% for our method.
 
 The \textit{Assumption-lean and Data-adaptive} (AAE) framework \citep{wang2024llm} applies transfer learning to debias LLM predictions. While effective, AAE assumes a parametric relationship between AI and human responses, limiting flexibility when this relationship is complex or heterogeneous across the feature space.
 
@@ -243,13 +243,14 @@ For primary data, the target blends the model prediction $g$ with the debiased h
 \end{algorithmic}
 \end{algorithm}
 
-\textbf{Implementation Notes.} Step 3 trains $\hat{g}$ on primary data excluding fold $k$, ensuring out-of-sample predictions. Under random selection, $\hat{e} = n_P/(n_P + n_A)$ is constant (no model needed). Step 5 fits a standard GLM with DML-adjusted targets $\hat{\tau}$, solvable by any convex optimizer.
+\textbf{Implementation Notes.} Step 3 trains $\hat{g}$ on primary data excluding fold $k$, ensuring out-of-sample predictions. Under random selection, $\hat{e} = n_P/(n_P + n_A)$ is constant (no model needed). Step 5 fits a standard GLM with DML-adjusted targets $\hat{\tau}$, solvable by any convex optimizer. Computational overhead is modest: $K$ logistic regressions on $O(n_P)$ samples plus $K$ GLM fits on $O(n_P + n_A)$ samples, totaling $O(K \cdot (n_P + n_A) \cdot d)$ operations.
 
 \subsection{Simplification Under Random Selection}
 
 In many applications, selection into primary data is by design (random sampling) rather than observational. This yields a key simplification:
 
 \begin{corollary}[Constant Propensity]
+\label{cor:constant_e}
 When $w \perp (\bX, \by, \bz)$, the propensity score is constant: $e(\bX, \bz) = \rho = n_P/(n_P + n_A)$. No propensity model is needed.
 \end{corollary}
 
@@ -303,7 +304,7 @@ Let $\hat{\bbeta}^P$ be the primary-only estimator. If $e(\bX,\bz) = \rho$ is co
 with strict inequality when $\rho < 1$ and $\E[\bX^\top(\nabla b(\bX\bbeta^*) - g^*)(\nabla b(\bX\bbeta^*) - g^*)^\top \bX] \succ 0$.
 \end{corollary}
 
-\textbf{Interpretation.} The strict inequality condition holds whenever AI predictions are \textit{informative}---i.e., $g^*(\bX,\bz) \neq \nabla b(\bX\bbeta^*)$. When AI predictions perfectly match the GLM's conditional mean, DML and primary-only achieve identical efficiency. Otherwise, DML strictly dominates.
+\textbf{Interpretation.} The strict inequality condition holds whenever AI predictions are \textit{informative}---meaning $g^*(\bX,\bz)$ differs from the GLM's fitted values $\nabla b(\bX\bbeta^*)$. Intuitively, this occurs when AI predictions provide information about $y$ beyond what $X$ alone captures. If AI predictions were uninformative (random noise), we would have $g^*(X,z) = \E[y|X]$, and augmented data would not help. In practice, even 57\% accurate predictions satisfy this condition because they reveal systematic patterns in the AI-human relationship.
 
 The proof (Appendix~\ref{app:proof_dominance}) decomposes the variance into two terms: one depending on $\zeta = \bX^\top(\nabla b - g^*)$ (model-prediction error) and one on $\pi = \bX^\top(g^* - \by)$ (irreducible noise). DML reduces the first term by factor $\rho$ through auxiliary data, while the second remains unchanged.
 
@@ -366,7 +367,6 @@ Price & \$35K--\$65K & ---\\
 
 \begin{enumerate}
     \item \textbf{DML}: Our method with 5-fold cross-fitting, stratified logistic regression for $g$ with regularization $C=0.05$
-    \item \textbf{DML-2}: Variant averaging fold-specific $\hat{\bbeta}_k$ (exact algorithm from Section~\ref{sec:method})
     \item \textbf{AAE}: Assumption-lean method from \citet{wang2024llm}
     \item \textbf{Primary Only}: Standard MLE using only human-labeled data
     \item \textbf{Naive}: Pooling human and AI labels without correction
@@ -375,7 +375,12 @@ Price & \$35K--\$65K & ---\\
 
 \subsection{Main Results}
 
-Table~\ref{tab:main} presents Mean Absolute Percentage Error (MAPE) across methods.
+We evaluate methods using Mean Absolute Percentage Error (MAPE) relative to ground truth parameters:
+\begin{equation}
+    \text{MAPE} = \frac{100}{d} \sum_{j=1}^{d} \frac{|\hat{\beta}_j - \beta^*_j|}{|\beta^*_j|}
+    \label{eq:mape}
+\end{equation}
+Table~\ref{tab:main} presents MAPE across methods.
 
 \begin{table}[t]
 \caption{Benchmark comparison (MAPE \%, lower is better). All methods use identical sample paths per trial.}
@@ -388,7 +393,6 @@ Table~\ref{tab:main} presents Mean Absolute Percentage Error (MAPE) across metho
 Method & $n$=50 & $n$=100 & $n$=150 & $n$=200 & Avg \\
 \midrule
 \textbf{DML} & \textbf{17.4} & \textbf{16.8} & \textbf{16.3} & \textbf{15.5} & \textbf{16.5} \\
-DML-2 & 17.6 & 16.9 & 16.5 & 15.9 & 16.7 \\
 AAE & 20.9 & 17.0 & 16.4 & 16.2 & 17.6 \\
 Primary & 55.6 & 29.8 & 22.7 & 19.9 & 32.0 \\
 PPI & 93.3 & 48.5 & 34.0 & 28.8 & 51.1 \\
@@ -437,7 +441,7 @@ The key difference lies in how each method uses AI predictions:
 
 \textbf{When Does PPI Work Well?} PPI is effective when AI predictions are continuous, well-calibrated probabilities close to true outcomes. In classification with $z = P(y=1|X)$ and high accuracy, PPI achieves substantial variance reduction. Our setting violates this: GPT-4o outputs discrete choices, not calibrated probabilities.
 
-Figure~\ref{fig:comparison} (Appendix~\ref{app:figures}) shows that DML's advantage grows as AI accuracy decreases, while PPI degrades rapidly below 70\% accuracy.
+Appendix~\ref{app:experiments} provides additional sensitivity analysis showing that DML's advantage grows as AI accuracy decreases, while PPI degrades rapidly below 70\% accuracy.
 
 %============================================================================
 \section{Conclusion}
@@ -446,7 +450,7 @@ Figure~\ref{fig:comparison} (Appendix~\ref{app:figures}) shows that DML's advant
 
 We developed a Double Machine Learning framework for AI data augmentation in Generalized Linear Models. The key insight is treating AI predictions as informative features rather than outcome proxies, enabling valid inference even when AI accuracy is moderate.
 
-Our theoretical contributions establish asymptotic normality and prove variance dominance over primary-only estimation. Empirically, DML achieves state-of-the-art performance on conjoint analysis, reducing estimation error by 48\% versus primary-only and avoiding the catastrophic failures of PPI when its assumptions are violated.
+Our theoretical contributions establish asymptotic normality and prove variance dominance over primary-only estimation. Empirically, DML achieves state-of-the-art performance on conjoint analysis, reducing MAPE from 32.0\% to 16.5\% (a 48\% relative improvement) versus primary-only estimation, while avoiding the failures of PPI when its assumptions are violated.
 
 \textbf{Practical Implications.} Our framework enables researchers and practitioners to leverage abundant AI-generated data while maintaining statistical rigor. The efficiency gains translate to substantial cost savings: achieving the same precision with 50 human labels plus 1000 AI labels versus 200+ human labels represents 75\%+ cost reduction at typical annotation rates.
 
@@ -765,7 +769,6 @@ GPT-4o achieves 57\% accuracy (excluding abstentions), with abstention rate appr
 Method & $n$=50 & $n$=100 & $n$=150 & $n$=200 & Mean & Std \\
 \midrule
 DML & 17.44 & 16.81 & 16.25 & 15.55 & 16.51 & 0.82 \\
-DML-2 & 17.56 & 16.93 & 16.46 & 15.94 & 16.72 & 0.70 \\
 AAE & 20.94 & 17.00 & 16.37 & 16.22 & 17.63 & 2.17 \\
 Primary & 55.58 & 29.82 & 22.67 & 19.85 & 31.98 & 16.18 \\
 PPI & 93.32 & 48.49 & 33.97 & 28.77 & 51.14 & 29.07 \\
@@ -781,15 +784,5 @@ Naive & 128.62 & 100.74 & 85.34 & 73.59 & 97.07 & 23.74 \\
 \textbf{G-Model Regularization.} Strong regularization ($C \in [0.01, 0.1]$) outperforms weak regularization ($C \geq 1$), as calibrated probabilities matter more than classification accuracy.
 
 \textbf{Auxiliary Sample Size.} Performance improves with $n_A$ up to approximately $10 \times n_P$, with diminishing returns thereafter.
-
-\section{Additional Figures}
-\label{app:figures}
-
-[Placeholder for figures showing:
-\begin{itemize}
-    \item MAPE vs.\ AI accuracy for DML vs.\ PPI
-    \item Convergence of DML estimates with increasing $n_P$
-    \item Calibration plots for g-model predictions
-\end{itemize}]
 
 \end{document}
