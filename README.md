@@ -244,6 +244,7 @@ run_dml2(X_all, y_real, y_aug, real_rows, aug_rows, n_folds=5)
 run_primary_only(X_all, y_real, real_rows)
 run_naive(X_all, y_real, y_aug, real_rows, aug_rows)
 run_aae(X_all, y_real, y_aug, real_rows, aug_rows)
+run_ppi(X_all, y_real, y_aug, real_rows, aug_rows)  # Requires ppi_py
 
 # Run all methods at once
 run_all_methods(X_all, y_real, y_aug, real_rows, aug_rows)
@@ -325,6 +326,9 @@ X_diff = X[1, 1:] - X[0, 1:]  # Shape: (11,)
 
 ```bash
 pip install numpy torch scikit-learn
+
+# Optional: for PPI baseline comparison
+pip install ppi-python
 ```
 
 ---
@@ -344,8 +348,8 @@ pip install numpy torch scikit-learn
 
 ## Summary
 
-1. **Use `dml.py`** - it contains everything you need
-2. **DML ranks 1st** - beats all benchmarks (AAE, Primary Only, Naive)
+1. **Use `dml.py`** - it contains everything you need (DML, DML-2, AAE, Naive, Primary, PPI)
+2. **DML ranks 1st** - beats all benchmarks (AAE, Primary Only, Naive, PPI)
 3. **DML ≈ DML-2** - both are valid (0.17% difference), use whichever you prefer
 4. **Constant e works** - no need for complex propensity modeling
 5. **G-model matters** - use well-regularized Logistic Regression (C=0.05)

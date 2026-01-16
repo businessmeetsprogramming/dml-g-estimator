@@ -18,8 +18,8 @@ import numpy as np
 import argparse
 import gc
 from dml import (
-    run_dml, run_dml2, run_primary_only, run_naive, run_aae,
-    calculate_mape, GROUND_TRUTH_PARAMS
+    run_dml, run_dml2, run_primary_only, run_naive, run_aae, run_ppi,
+    calculate_mape, GROUND_TRUTH_PARAMS, PPI_AVAILABLE
 )
 
 
@@ -60,6 +60,8 @@ def main():
 
     # Methods to compare
     methods = ['Primary', 'Naive', 'AAE', 'DML', 'DML-2']
+    if PPI_AVAILABLE:
+        methods.append('PPI')
     results = {m: {n: [] for n in n_real_values} for m in methods}
 
     # Run experiments
@@ -94,9 +96,14 @@ def main():
                         beta = run_dml(X_all, y_real, y_aug, real_rows, aug_rows)
                     elif method == 'DML-2':
                         beta = run_dml2(X_all, y_real, y_aug, real_rows, aug_rows)
+                    elif method == 'PPI':
+                        beta = run_ppi(X_all, y_real, y_aug, real_rows, aug_rows)
+                        if beta is None:
+                            continue
 
                     mape = calculate_mape(beta, GROUND_TRUTH_PARAMS)
-                    results[method][n_real].append(mape)
+                    if mape < 1000:  # Filter extreme values for PPI
+                        results[method][n_real].append(mape)
                 except Exception as e:
                     print(f"  Error in {method}, trial {trial}: {e}")
 
