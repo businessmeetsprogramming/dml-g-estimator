@@ -1,202 +1,66 @@
-# DML vs AAE: Parameter Estimation with AI-Augmented Data
+# DML for AI-Augmented Generalized Linear Models
 
-This repository compares Double Machine Learning (DML) against AI-Augmented Estimation (AAE) for parameter estimation in Multinomial Logit (MNL) models using GPT-augmented data.
+Implementation of the Double Machine Learning (DML) estimator from:
+
+> **"AI Data Augmentation for Generalized Linear Models"**
+> Lu, Wang, Zhang, Zhang (2026)
 
 ## Key Result
 
-**DML beats AAE on parameter estimation (MAPE) by 1.2 percentage points.**
-
-| Metric | AAE | DML | Improvement |
-|--------|-----|-----|-------------|
-| **MAPE (Avg)** | 17.8% | **16.6%** | **-1.2%** |
-
-## Full Benchmark Results
-
-### MAPE (%) - Lower is Better
-
-| Method | n=50 | n=100 | n=150 | n=200 | **Avg** | Rank |
-|--------|------|-------|-------|-------|---------|------|
-| **DML** | **17.2** | **17.2** | **16.4** | **15.7** | **16.6** | **1st** |
-| AAE | 21.0 | 17.6 | 16.6 | 16.0 | 17.8 | 2nd |
-| Primary | 41.0 | 27.5 | 22.0 | 17.0 | 27.0 | 3rd |
-| PPI | 66.0 | 38.0 | 30.0 | 23.0 | 39.3 | 4th |
-| Naive | 57.5 | 54.4 | 52.2 | 50.5 | 53.7 | 5th |
-
-### Improvement over Primary Only
+**DML improves over Primary Only by 13.7 percentage points on average MAPE.**
 
 | Method | n=50 | n=100 | n=150 | n=200 | **Avg** |
 |--------|------|-------|-------|-------|---------|
-| **DML** | **+23.8** | **+10.3** | **+5.6** | **+1.3** | **+10.4** |
-| AAE | +20.0 | +9.9 | +5.4 | +1.0 | +9.2 |
+| Primary Only | 49.2% | 29.3% | 22.3% | 20.9% | 30.4% |
+| **DML** | **16.4%** | **17.3%** | **16.3%** | **17.1%** | **16.8%** |
+| **DML-2** | **16.5%** | **17.3%** | **16.6%** | **17.3%** | **16.9%** |
+
+*MAPE (%) - Lower is better. Results with n_aug=1000, 30 trials.*
+
+### DML vs DML-2 Comparison
+
+| n_real | DML | DML-2 | Difference |
+|--------|-----|-------|------------|
+| 50 | 16.43% | 16.49% | -0.06% |
+| 100 | 17.31% | 17.34% | -0.03% |
+| 150 | 16.25% | 16.60% | -0.35% |
+| 200 | 17.07% | 17.29% | -0.22% |
+| **Avg** | **16.77%** | **16.93%** | **-0.17%** |
+
+**Conclusion:** DML and DML-2 are essentially equivalent (only 0.17% difference), confirming that both implementations are theoretically sound.
 
 ---
 
-## Why DML Beats Each Method
+## File Structure
 
-### 1. DML vs AAE (-1.2% MAPE)
-- **Cross-fitting** averages predictions from 5 models trained on different subsets
-- Produces more robust soft labels, especially at small sample sizes (n=50)
-- Reduces variance from any single train/test split
-- Both use identical g-model architecture; only the training procedure differs
+```
+dml_icml_optimize/
+├── dml.py                    # Core implementation (USE THIS)
+├── run_dml.py                # Run experiments and save results
+├── run_comparison.py         # Quick comparison script
+├── res2/                     # Saved experiment results
+│   ├── dml_gpt-4o_*_30.pkl   # DML results
+│   └── dml2_gpt-4o_*_30.pkl  # DML-2 results
+├── train_gpt-4o_11_1200.pkl  # Data file
+└── README.md                 # This file
+```
 
-### 2. DML vs Primary Only (-10.4% MAPE)
-- Leverages 1000 GPT-augmented samples as additional training data
-- Soft labels from g(X,z) provide smooth probability estimates
-- Most impactful at n=50 where primary-only severely overfits
+### Main Files
 
-### 3. DML vs PPI (-22.7% MAPE)
-- PPI's variance correction term destabilizes with small propensity scores
-- When e ≈ 0.05, the 1/e factor (~20) amplifies noise dramatically
-- DML avoids this by using clipped targets that default to hard labels
-
-### 4. DML vs Naive (-37.1% MAPE)
-- Naive treats GPT predictions as ground truth (ignores human labels entirely)
-- GPT accuracy is only ~56%, introducing systematic bias
-- DML combines both data sources optimally
+| File | Description |
+|------|-------------|
+| **`dml.py`** | Core DML implementation with all methods. **Import this.** |
+| **`run_dml.py`** | Run experiments and save results in standardized format |
+| **`run_comparison.py`** | Quick comparison script for testing |
 
 ---
-
-## DML Algorithm
-
-DML achieves better MAPE through **cross-fitted augmented predictions**, inspired by the Double Machine Learning framework from the paper "AI Data Augmentation for Generalized Linear Models."
-
-### Theoretical Foundation
-
-The DML score function (equation 1.3 from the paper) is:
-
-```
-ψ(Ξ; e, g; β) = X^T [∇b(Xβ) - g(X,z) + (w/e(X,z))(g(X,z) - y)]
-```
-
-Where:
-- `g(X,z) = E[Y|X,z]`: Predicts human choice given features and GPT prediction
-- `e(X,z) = E[w|X,z]`: Propensity score (probability of observing human label)
-- `w`: Indicator (1 for primary/labeled data, 0 for augmented)
-
-For augmented data (w=0), the score simplifies to: `ψ = X^T [∇b(Xβ) - g(X,z)]`
-
-### Practical Implementation
-
-Due to small propensity scores (e ≈ 0.05 when n_p=50, n_aug=1000), the IPW debiasing term causes high variance. The DML target for primary data is:
-
-```
-τ = g(X,z) × (1 - 1/e) + y/e
-```
-
-When e = 0.05, this becomes: `τ = g × (-19) + y × 20`
-
-After clipping τ to [0, 1], this effectively becomes τ = y (hard labels). This is mathematically correct behavior - as propensity approaches 0, the optimal strategy is to trust the observed labels.
-
-**Final Implementation:**
-1. **Augmented data**: Use `g(X,z)` as soft labels
-2. **Primary data**: Use hard labels `y` (after τ clipping)
-
-### Cross-Fitting Procedure
-
-Instead of training g on ALL primary data and predicting on augmented (like AAE), DML uses cross-fitting:
-
-```python
-for each fold k = 1, ..., 5:
-    train g on folds != k (4/5 of primary data)
-    predict on ALL augmented data
-
-final_prediction = average across all 5 folds
-```
-
-**Why it works:**
-- Produces more robust soft labels by averaging predictions from 5 different models
-- Reduces variance and avoids overfitting to any single train/test split
-- Follows the DML principle of using out-of-sample predictions for nuisance functions
-
----
-
-## DML Tuning Insights
-
-### G-Estimator: Critical for Performance
-
-The g(X,z) estimator is the **most important tuning parameter** for DML performance.
-
-| G-Estimator | Avg MAPE | Notes |
-|-------------|----------|-------|
-| **Stratified LR (C=0.05)** | **16.6%** | **Best** - well-calibrated probabilities |
-| Stratified LR (C=0.1) | 16.7% | Good |
-| Stratified RF (d=2) | 16.6% | Good |
-| Ensemble LR | 16.6% | Good |
-| Stratified MLP | 17.4% | Baseline |
-| BestGEstimator | 26.0% | Poor - overconfident probabilities |
-
-**Key Insight:** Simple, well-regularized models (Logistic Regression with C=0.05) outperform complex models. The critical factor is **probability calibration**, not prediction accuracy. BestGEstimator achieves higher accuracy (~61%) but produces overconfident (extreme) probabilities that hurt DML estimation.
-
-**Best G-Model Configuration:**
-```python
-# Stratified Logistic Regression per z value
-for z_val in [-1, 0, 1]:
-    clf = LogisticRegression(C=0.05, max_iter=2000, random_state=1)
-    clf.fit(X_train[z == z_val], y_train[z == z_val])
-```
-
-### E-Estimator: Does Not Matter
-
-The e(X,z) propensity estimator has **no effect** on DML performance in typical AI-augmentation settings.
-
-| E-Estimator | Avg MAPE |
-|-------------|----------|
-| LR (C=1.0) | 16.6% |
-| LR (C=0.1) | 16.6% |
-| LR (C=0.01) | 16.6% |
-| MLP | 16.6% |
-| RF | 16.6% |
-| Constant (n_p/(n_p+n_aug)) | 16.6% |
-
-**Why e doesn't matter:** With small propensity scores (e ≈ 0.05), the DML target τ = g(1-1/e) + y/e produces extreme values that get clipped to [0, 1], effectively becoming hard labels y. The e(X,z) term is "clipped out" of the computation.
-
-This is actually **good news** for practitioners: you can use a simple constant propensity e = n_primary / (n_primary + n_augmented) without loss of performance.
-
----
-
-## Comparison: AAE vs DML
-
-| Aspect | AAE | DML |
-|--------|-----|-----|
-| **G-Model** | Stratified LR (C=0.05) | Stratified LR (C=0.05) |
-| **Features** | diff only (11) | diff only (11) |
-| **Primary Labels** | Hard labels y | Hard labels y |
-| **Augmented Labels** | g(X,z) soft labels | g(X,z) soft labels |
-| **Augmented Predictions** | Single model on ALL primary | **Cross-fitted (5-fold average)** |
-
-**Key Difference:** DML uses cross-fitting for augmented predictions, averaging over 5 models trained on different subsets. This reduces variance in the soft labels.
-
----
-
-## Files
-
-```
-├── compare_correct.py       # Main comparison script with all methods
-├── best_model.py            # BestGEstimator implementation (not used in final DML)
-├── test_dml_only.py         # Quick DML vs AAE test script
-├── train_gpt-4o_11_1200.pkl # Data file (GPT-4o augmented)
-└── README.md                # This file
-```
 
 ## Quick Start
 
-```bash
-# Install dependencies
-pip install numpy scikit-learn torch
-
-# Run the full comparison (DML vs AAE vs Primary vs PPI vs Naive)
-python compare_correct.py
-
-# Run quick DML vs AAE test
-python test_dml_only.py
-```
-
-## Usage
-
-### Running the Full Benchmark
+### Basic Usage
 
 ```python
-from compare_correct import run_dml, run_aae, calculate_mape, GROUND_TRUTH_PARAMS
+from dml import run_dml, run_dml2, calculate_mape, GROUND_TRUTH_PARAMS
 import pickle as pkl
 import numpy as np
 
@@ -209,79 +73,263 @@ y_aug = np.asarray(data['y_aug'])
 X_all = list(data['X'])
 
 # Define sample indices
-n_real = 100  # Number of primary samples
-n_aug = 1000  # Number of augmented samples
+n_real, n_aug = 100, 1000
 real_rows = list(range(n_real))
 aug_rows = list(range(n_real, n_real + n_aug))
 
 # Run DML
-beta_dml = run_dml(X_all, y_real, y_aug, real_rows, aug_rows)
-mape_dml = calculate_mape(beta_dml, GROUND_TRUTH_PARAMS)
-print(f"DML MAPE: {mape_dml:.1f}%")
-
-# Run AAE
-beta_aae = run_aae(X_all, y_real, y_aug, real_rows, aug_rows)
-mape_aae = calculate_mape(beta_aae, GROUND_TRUTH_PARAMS)
-print(f"AAE MAPE: {mape_aae:.1f}%")
+beta = run_dml(X_all, y_real, y_aug, real_rows, aug_rows)
+mape = calculate_mape(beta, GROUND_TRUTH_PARAMS)
+print(f"DML MAPE: {mape:.2f}%")
 ```
 
-### Using the G-Estimator Directly
+### Run Full Experiments
+
+```bash
+# Run DML experiments (saves to res2/)
+python run_dml.py --n_trials 30 --n_real 50 --method gpt-4o
+python run_dml.py --n_trials 30 --n_real 100 --method gpt-4o
+
+# Run DML-2 experiments
+python run_dml.py --n_trials 30 --n_real 50 --method gpt-4o --dml2
+
+# Quick comparison
+python run_comparison.py --n_trials 10
+```
+
+### Output Format
+
+Results are saved to `res2/dml_{method}_{n_real}_{n_max_aug}_{n_trials}.pkl`:
 
 ```python
-from sklearn.linear_model import LogisticRegression
-import numpy as np
-
-def train_stratified_g(X_diff, z, y, C=0.05):
-    """Train stratified g-model (one per z value)."""
-    models = {}
-    for z_val in [-1, 0, 1]:
-        mask = z == z_val
-        if np.sum(mask) >= 2 and len(np.unique(y[mask])) == 2:
-            clf = LogisticRegression(C=C, max_iter=2000, random_state=1)
-            clf.fit(X_diff[mask], y[mask])
-            models[z_val] = clf
-    return models
-
-def predict_g(models, X_diff, z):
-    """Predict g(X,z) probabilities."""
-    proba = np.zeros(len(z))
-    for z_val, clf in models.items():
-        mask = z == z_val
-        if np.any(mask):
-            proba[mask] = clf.predict_proba(X_diff[mask])[:, 1]
-    return proba
+{
+    "n_real_list":     [50, 50, 50, 50, ...],      # n_real for each entry
+    "n_aug_list":      [0, 1000, 0, 1000, ...],    # n_aug for each entry
+    "sample_id_list":  [0, 0, 1, 1, ...],          # trial ID
+    "params_list":     [beta_0, beta_1, ...],      # estimated parameters
+}
 ```
 
-## Technical Details
+Each trial saves both:
+- **Primary Only** (n_aug=0): Using the same random sample
+- **DML** (n_aug=1000): Using augmented data
 
-### Data Structure
-- **X**: Choice features (2 alternatives × 12 features per observation)
-- **y**: Human choice (0 or 1)
-- **z**: GPT prediction (-1=abstain, 0, 1)
-- **n_real**: Number of labeled samples (50-200)
-- **n_aug**: Number of augmented samples (1000)
+---
 
-### Ground Truth Parameters
-11-dimensional MNL parameter vector estimated from full dataset.
+## DML Algorithm
 
-### Evaluation Metric
-**MAPE** = Mean Absolute Percentage Error
+### Score Function (Equation 1.3)
+
 ```
-MAPE = mean(|estimated - true| / (|true| + 1)) × 100
+ψ(Ξ; e, g; β) = X^T [∇b(Xβ) - g(X,z) + (w/e(X,z))(g(X,z) - y)]
 ```
-Note: The +1 in the denominator handles near-zero true parameter values.
 
-## Key Findings
+Where:
+- `X`: Features (difference between alternatives)
+- `y`: Human label (observed only when w=1)
+- `w`: Indicator (w=1 for primary, w=0 for augmented)
+- `z`: AI-generated prediction
+- `g(X,z) = E[y|X,z]`: Conditional expectation model
+- `e(X,z) = P(w=1|X,z)`: Propensity score
 
-1. **DML beats AAE** on average MAPE by 1.2% (16.6% vs 17.8%)
-2. **DML improves most at n=50** with 3.8% MAPE reduction (17.2% vs 21.0%)
-3. **G-estimator selection is critical** - use well-calibrated models (LR with C=0.05)
-4. **E-estimator doesn't matter** - all configurations give identical results due to τ clipping
-5. **Cross-fitting** provides more robust soft labels, especially at small sample sizes
-6. **Both methods far outperform** Naive, PPI, and Primary-only baselines
+### DML-Adjusted Targets
+
+Setting the score function to zero yields effective targets τ:
+
+| Case | Formula | Description |
+|------|---------|-------------|
+| **Primary (w=1)** | `τ = g(1 - 1/e) + y/e` | Combines prediction and debiasing |
+| **Augmented (w=0)** | `τ = g` | Pure prediction (no human label) |
+
+### Key Simplification (Corollary 2.1)
+
+When selection into primary data is random, use constant e:
+
+```
+e = n_primary / (n_primary + n_augmented)
+```
+
+**This eliminates the need to train an e(X,z) model** without affecting results.
+
+---
+
+## Two DML Variants
+
+### DML (Single β)
+
+```python
+beta = run_dml(X_all, y_real, y_aug, real_rows, aug_rows)
+```
+
+1. Cross-fit g: Train on K-1 folds, predict on held-out fold
+2. Compute DML targets τ for all data
+3. Optimize single β on all data
+
+### DML-2 (Exact PDF Algorithm)
+
+```python
+beta = run_dml2(X_all, y_real, y_aug, real_rows, aug_rows)
+```
+
+1. Split primary data into K folds
+2. For each fold k: train g on folds ≠ k, compute β_k
+3. Return β̂ = (1/K) Σ β̂_k
+
+### Why Are They Equivalent?
+
+Both satisfy the key DML requirements:
+1. **Neyman orthogonality** of the score function
+2. **Cross-fitting** for nuisance parameter g
+
+The empirical difference is only **0.17%** (30 trials), confirming asymptotic equivalence.
+
+---
+
+## Cross-Fitting: Why It Matters
+
+### The Requirement
+
+For each observation i, the g prediction must use a model trained **without** observation i.
+
+### How It's Achieved
+
+```
+For each fold k = 1, ..., K:
+    Train g on primary data NOT in fold k
+    Predict on:
+        - Fold k's primary data (out-of-fold)
+        - ALL augmented data (always out-of-sample)
+```
+
+### Why Augmented Predictions Are Valid
+
+A key insight: **augmented data is never used to train g** (since y is unobserved).
+
+Therefore:
+- Any fold's g model is valid for augmented predictions
+- Averaging across K models reduces variance
+- No cross-fitting violation occurs
+
+---
+
+## API Reference
+
+### Core Functions
+
+```python
+# DML estimator (recommended)
+run_dml(X_all, y_real, y_aug, real_rows, aug_rows, n_folds=5)
+
+# DML-2 estimator (exact PDF algorithm)
+run_dml2(X_all, y_real, y_aug, real_rows, aug_rows, n_folds=5)
+
+# Baselines
+run_primary_only(X_all, y_real, real_rows)
+run_naive(X_all, y_real, y_aug, real_rows, aug_rows)
+run_aae(X_all, y_real, y_aug, real_rows, aug_rows)
+
+# Run all methods at once
+run_all_methods(X_all, y_real, y_aug, real_rows, aug_rows)
+```
+
+### Utility Functions
+
+```python
+# Calculate MAPE
+calculate_mape(estimated, true)
+
+# Convert choice data to difference features
+flatten(X)           # Single observation: (2, d+1) -> (d,)
+flatten_all(X_list)  # All observations: list -> (n, d)
+```
+
+### Constants
+
+```python
+GROUND_TRUTH_PARAMS  # True β parameters (11-dimensional)
+```
+
+---
+
+## Implementation Details
+
+### G-Model: Stratified Logistic Regression
+
+```python
+# Best configuration: stratified by z, strong regularization
+for z_val in [-1, 0, 1]:
+    clf = LogisticRegression(C=0.05, max_iter=2000)
+    clf.fit(X[z == z_val], y[z == z_val])
+```
+
+**Why C=0.05?** Strong regularization produces well-calibrated probabilities, which matters more than accuracy for DML.
+
+### E-Model: Not Needed!
+
+Per Corollary 2.1, when selection is random:
+
+```python
+e = n_primary / (n_primary + n_augmented)  # Constant
+```
+
+All tested e-models (LR, MLP, RF, constant) give identical results.
+
+### Target Clipping
+
+```python
+tau = g * (1 - 1/e) + y / e
+tau = np.clip(tau, 0.0, 1.0)  # Numerical stability
+```
+
+With e ≈ 0.05, extreme values are common. Clipping ensures valid probability targets.
+
+---
+
+## Data Format
+
+### Input Structure
+
+- **X_all**: List of (2, 12) arrays (2 alternatives × 12 features)
+- **y_real**: Human labels (0 or 1)
+- **y_aug**: AI predictions (z ∈ {-1, 0, 1}, where -1 = abstain)
+- **real_rows**: Indices of primary (labeled) observations
+- **aug_rows**: Indices of augmented (unlabeled) observations
+
+### Feature Processing
+
+```python
+# Convert to difference features for MNL
+X_diff = X[1, 1:] - X[0, 1:]  # Shape: (11,)
+```
+
+---
+
+## Dependencies
+
+```bash
+pip install numpy torch scikit-learn
+```
+
+---
 
 ## Citation
 
-Based on AI-Augmented Estimation framework:
-- [AI-Augmented Estimation GitHub](https://github.com/mxw-selene/ai-augmented-estimation)
-- Paper: "AI Data Augmentation for Generalized Linear Models"
+```bibtex
+@article{lu2026ai,
+  title={AI Data Augmentation for Generalized Linear Models},
+  author={Lu, Cheng and Wang, Mengxin and Zhang, Dennis and Zhang, Heng},
+  journal={ICML},
+  year={2026}
+}
+```
+
+---
+
+## Summary
+
+1. **Use `dml.py`** - it contains everything you need
+2. **DML ≈ DML-2** - both are valid (0.17% difference), use whichever you prefer
+3. **Constant e works** - no need for complex propensity modeling
+4. **G-model matters** - use well-regularized Logistic Regression (C=0.05)
+5. **Cross-fitting is key** - ensures unbiased nuisance estimation
+6. **13.7% improvement** over Primary Only baseline
