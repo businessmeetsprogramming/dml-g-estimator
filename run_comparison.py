@@ -18,7 +18,7 @@ import numpy as np
 import argparse
 import gc
 from dml import (
-    run_dml, run_dml2, run_primary_only, run_naive, run_aae, run_ppi,
+    run_dml, run_dml2, run_primary_only, run_naive, run_aae, run_ppi, run_ppi_plusplus,
     calculate_mape, GROUND_TRUTH_PARAMS, PPI_AVAILABLE
 )
 
@@ -62,6 +62,7 @@ def main():
     methods = ['Primary', 'Naive', 'AAE', 'DML', 'DML-2']
     if PPI_AVAILABLE:
         methods.append('PPI')
+        methods.append('PPI++')
     results = {m: {n: [] for n in n_real_values} for m in methods}
 
     # Run experiments
@@ -98,6 +99,10 @@ def main():
                         beta = run_dml2(X_all, y_real, y_aug, real_rows, aug_rows)
                     elif method == 'PPI':
                         beta = run_ppi(X_all, y_real, y_aug, real_rows, aug_rows)
+                        if beta is None:
+                            continue
+                    elif method == 'PPI++':
+                        beta = run_ppi_plusplus(X_all, y_real, y_aug, real_rows, aug_rows)
                         if beta is None:
                             continue
 
@@ -160,14 +165,28 @@ def main():
 
     print(f"\n  Average: DML={dml_avg:.2f}%, DML-2={dml2_avg:.2f}%, Diff={dml_avg-dml2_avg:+.2f}%")
 
+    # PPI comparisons if available
+    if PPI_AVAILABLE and results['PPI'][n_real_values[0]]:
+        ppi_avg = np.mean([np.mean(results['PPI'][n]) for n in n_real_values if results['PPI'][n]])
+        ppi_pp_avg = np.mean([np.mean(results['PPI++'][n]) for n in n_real_values if results['PPI++'][n]])
+        print(f"  Average: PPI={ppi_avg:.2f}%, PPI++={ppi_pp_avg:.2f}%")
+
     print("\n" + "=" * 70)
     print("CONCLUSION")
     print("=" * 70)
-    print(f"""
+    conclusion = f"""
     - DML and DML-2 difference: {abs(dml_avg - dml2_avg):.2f}% (should be < 1%)
     - DML improvement over AAE: {aae_avg - dml_avg:+.2f}%
-    - Both DML variants are asymptotically equivalent
-    """)
+    - Both DML variants are asymptotically equivalent"""
+
+    if PPI_AVAILABLE and results['PPI'][n_real_values[0]]:
+        ppi_avg = np.mean([np.mean(results['PPI'][n]) for n in n_real_values if results['PPI'][n]])
+        ppi_pp_avg = np.mean([np.mean(results['PPI++'][n]) for n in n_real_values if results['PPI++'][n]])
+        conclusion += f"""
+    - DML improvement over PPI: {ppi_avg - dml_avg:+.2f}%
+    - DML improvement over PPI++: {ppi_pp_avg - dml_avg:+.2f}%"""
+
+    print(conclusion)
 
 
 if __name__ == "__main__":

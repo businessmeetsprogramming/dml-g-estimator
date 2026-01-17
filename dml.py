@@ -652,7 +652,7 @@ def run_aae(X_all, y_real, y_aug, real_rows, aug_rows):
 
 def run_ppi(X_all, y_real, y_aug, real_rows, aug_rows):
     """
-    PPI (Prediction-Powered Inference) baseline.
+    PPI (Prediction-Powered Inference) baseline with fixed lambda=1.
 
     Uses the ppi_py package for logistic regression coefficient estimation.
     PPI assumes AI predictions (z) are direct proxies for y.
@@ -704,6 +704,58 @@ def run_ppi(X_all, y_real, y_aug, real_rows, aug_rows):
         return None
 
 
+def run_ppi_plusplus(X_all, y_real, y_aug, real_rows, aug_rows):
+    """
+    PPI++ (Prediction-Powered Inference with optimized lambda).
+
+    PPI++ auto-tunes the lambda parameter to minimize variance while
+    maintaining unbiasedness. This is done by omitting the lam parameter
+    in ppi_logistic_pointestimate, which triggers internal optimization.
+
+    Parameters
+    ----------
+    X_all : list of ndarray
+        All feature matrices
+    y_real : ndarray
+        Human labels
+    y_aug : ndarray
+        AI labels (z)
+    real_rows : list of int
+        Indices of primary observations
+    aug_rows : list of int
+        Indices of augmented observations
+
+    Returns
+    -------
+    ndarray of shape (d,) or None
+        Estimated β parameters, or None if PPI is not available
+    """
+    if not PPI_AVAILABLE:
+        return None
+
+    # Filter out z=-1 (abstentions)
+    real_rows_filtered = [r for r in real_rows if y_aug[r] != -1]
+    aug_rows_filtered = [r for r in aug_rows if y_aug[r] != -1]
+
+    X_p = flatten_all([X_all[r] for r in real_rows_filtered])
+    y_p = np.array([y_real[r] for r in real_rows_filtered]).astype(float)
+    z_p = np.array([y_aug[r] for r in real_rows_filtered]).astype(float)
+
+    X_a = flatten_all([X_all[r] for r in aug_rows_filtered])
+    z_a = np.array([y_aug[r] for r in aug_rows_filtered]).astype(float)
+
+    optimizer_options = {"ftol": 1e-5, "gtol": 1e-5, "maxls": 10000, "maxiter": 10000}
+
+    try:
+        # No lam parameter = auto-tune lambda (PPI++)
+        return ppi_logistic_pointestimate(
+            X_p, y_p, z_p, X_a, z_a,
+            optimizer_options=optimizer_options
+        )
+    except Exception:
+        return None
+
+
 # =============================================================================
 # CONVENIENCE FUNCTION
 # =============================================================================
@@ -738,5 +790,6 @@ def run_all_methods(X_all, y_real, y_aug, real_rows, aug_rows):
     results['DML'] = run_dml(X_all, y_real, y_aug, real_rows, aug_rows)
     results['DML-2'] = run_dml2(X_all, y_real, y_aug, real_rows, aug_rows)
     results['PPI'] = run_ppi(X_all, y_real, y_aug, real_rows, aug_rows)
+    results['PPI++'] = run_ppi_plusplus(X_all, y_real, y_aug, real_rows, aug_rows)
 
     return results
