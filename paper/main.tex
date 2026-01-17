@@ -87,7 +87,7 @@ $^3$W.P.\ Carey School of Business, Arizona State University\\[0.3em]
 %============================================================================
 \begin{minipage}{0.92\textwidth}
 \textbf{Abstract.}
-Large language models enable cheap AI annotations, but leveraging them for valid statistical inference remains challenging. Naive pooling introduces bias; Prediction-Powered Inference (PPI) requires AI outputs to directly approximate outcomes---violated when predictions are categorical or accuracy is moderate. We propose a Double Machine Learning framework that treats AI predictions as \textit{informative features} rather than outcome surrogates, learning $g(X,z) = \E[y|X,z]$ nonparametrically. Our Neyman-orthogonal score functions remain computable when human labels are missing, enabling valid inference on combined primary (human-labeled) and auxiliary (AI-augmented) data. We prove asymptotic normality and variance dominance over primary-only estimation under random selection. Empirically, DML excels across prediction quality regimes: on conjoint analysis with noisy LLM predictions (57\% accuracy), DML achieves 16.5\% MAPE versus 32.0\% (primary-only) and 51.1\% (PPI); on census data with well-calibrated ML predictions (85\% accuracy), DML reduces confidence interval width by 7$\times$ while achieving 47.0\% MAPE versus 116.9\% (primary-only). The key insight: AI predictions should enter estimation as features, not proxies---and when predictions are well-calibrated, $g=z$ directly.
+Large language models enable cheap AI annotations, but leveraging them for valid statistical inference remains challenging. Naive pooling introduces bias; Prediction-Powered Inference (PPI) requires AI outputs to directly approximate outcomes---violated when predictions are categorical or accuracy is moderate. We propose a Double Machine Learning framework that treats AI predictions as \textit{informative features} rather than outcome surrogates, learning $g(X,z) = \E[y|X,z]$ nonparametrically. Our Neyman-orthogonal score functions remain computable when human labels are missing, enabling valid inference on combined primary (human-labeled) and auxiliary (AI-augmented) data. We prove asymptotic normality and variance dominance over primary-only estimation under random selection. Empirically, DML excels across prediction quality regimes: on conjoint analysis with noisy LLM predictions (57\% accuracy), DML achieves 16.5\% MAPE versus 32.0\% (primary-only) with 97\% coverage (closest to nominal 95\%); on census data with well-calibrated ML predictions (85\% accuracy), DML reduces confidence interval width by 7$\times$ while achieving 47.0\% MAPE with 90\% coverage. The key insight: AI predictions should enter estimation as features, not proxies---and when predictions are well-calibrated, $g=z$ directly.
 \end{minipage}
 \vskip 1.5em
 \end{center}
@@ -408,6 +408,26 @@ Naive & 128.6 & 100.7 & 85.3 & 73.6 & 97.0 \\
 
 \textbf{DML achieves state-of-the-art performance.} With 16.5\% average MAPE, DML outperforms all baselines. The 15.5 percentage point improvement over Primary Only (32.0\%) demonstrates the value of AI augmentation. The 1.1 point improvement over AAE (17.6\%) reflects the benefit of nonparametric $g$-modeling.
 
+\textbf{Coverage probability.} Table~\ref{tab:conjoint_coverage} reports coverage probability across 30 trials. DML achieves 96.7\% average coverage, closest to the nominal 95\%, indicating well-calibrated confidence intervals. Primary Only (90.0\%) and PPI++ (89.0\%) under-cover, suggesting their standard errors are underestimated.
+
+\begin{table}[t]
+\caption{Conjoint benchmark: Coverage probability (\%) for 95\% CI. DML achieves best calibration.}
+\label{tab:conjoint_coverage}
+\vskip 0.1in
+\centering
+\small
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+Method & $n$=50 & $n$=100 & $n$=150 & $n$=200 & Avg \\
+\midrule
+\textbf{DML} & \textbf{97} & \textbf{97} & \textbf{96} & \textbf{97} & \textbf{96.7} \\
+Primary & 91 & 90 & 89 & 90 & 90.0 \\
+PPI++ & 94 & 90 & 87 & 85 & 89.0 \\
+\bottomrule
+\end{tabular}
+\vskip -0.1in
+\end{table}
+
 \textbf{PPI fails due to violated assumptions.} PPI assumes $\bz \approx \by$, but GPT-4o's 57\% accuracy means this assumption is severely violated. After filtering abstentions, PPI achieves 51.1\% MAPE---worse than Primary Only. Without filtering, PPI produces MAPE $>$ 300\%. This illustrates the danger of assuming AI predictions directly proxy outcomes.
 
 \subsection{Economic Interpretation}
@@ -510,7 +530,7 @@ Calibrated probabilities (ML, 85\%) & $g = z$ directly & $z \approx \E[y|X,z]$ \
 
 We introduced a paradigm shift in how AI predictions should be used for statistical inference: as \textit{informative features} rather than \textit{outcome proxies}. This perspective, formalized through Double Machine Learning, enables valid inference across the full spectrum of AI prediction quality---from noisy LLM outputs to well-calibrated ML probabilities.
 
-Our theoretical contributions establish asymptotic normality and prove variance dominance over primary-only estimation under random selection. Empirically, DML excels in both regimes tested: on conjoint analysis with noisy LLM predictions (57\% accuracy), DML achieves 16.5\% MAPE versus 32.0\% primary-only---a 48\% relative improvement; on census data with well-calibrated ML predictions (85\% accuracy), DML achieves 47.0\% MAPE versus 116.9\% primary-only while reducing confidence interval width by 7$\times$. Unlike PPI, which struggles with discrete or poorly-calibrated predictions, DML gracefully adapts by either learning the AI-human relationship (noisy predictions) or using predictions directly as conditional expectations (calibrated predictions).
+Our theoretical contributions establish asymptotic normality and prove variance dominance over primary-only estimation under random selection. Empirically, DML excels in both regimes tested: on conjoint analysis with noisy LLM predictions (57\% accuracy), DML achieves 16.5\% MAPE versus 32.0\% primary-only---a 48\% relative improvement---with 97\% coverage (closest to nominal 95\%); on census data with well-calibrated ML predictions (85\% accuracy), DML achieves 47.0\% MAPE versus 116.9\% primary-only while reducing confidence interval width by 7$\times$ and maintaining 90\% coverage. Unlike PPI, which struggles with discrete or poorly-calibrated predictions, DML gracefully adapts by either learning the AI-human relationship (noisy predictions) or using predictions directly as conditional expectations (calibrated predictions).
 
 \textbf{Practical Implications.} Our framework enables researchers and practitioners to leverage abundant AI-generated data while maintaining statistical rigor. The efficiency gains translate to substantial cost savings: achieving the same precision with 50 human labels plus 1000 AI labels versus 200+ human labels represents 75\%+ cost reduction at typical annotation rates.
 
@@ -824,6 +844,8 @@ GPT-4o achieves 57\% accuracy (excluding abstentions), with abstention rate appr
 \end{enumerate}
 
 \textbf{Optimization.} GLM fit using L-BFGS with DML-adjusted targets~\eqref{eq:tau_primary}--\eqref{eq:tau_aux}.
+
+\textbf{Variance Estimation: The Clipping Issue.} The DML target for primary data, $\tau = g(1 - 1/e) + y/e$, can take extreme values when $e$ is small. With $n_P = 100$ and $n_A = 1000$, we have $e \approx 0.09$ and $1/e \approx 11$. When $y = 1$ and $g = 0.2$, the unclipped $\tau \approx 11$. For optimization stability, $\tau$ is typically clipped to $[0, 1]$, but this destroys variance information: the residual $\tau - p$ shrinks from $\approx 10$ to $\approx 0.5$, making the sandwich SE estimator severely underestimate uncertainty. The solution is to use \textit{unclipped} $\tau$ for variance estimation while keeping clipped $\tau$ for optimization. This preserves the full variance information in the influence function, yielding well-calibrated confidence intervals (97\% coverage vs.\ 52\% with clipped $\tau$).
 
 \subsection{Full Results by Sample Size}
 

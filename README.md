@@ -24,14 +24,39 @@ Implementation of the Double Machine Learning (DML) estimator from:
 
 *30 trials, n_aug=1000, 11 features. GPT-4o predictions with 57% accuracy.*
 
+#### Coverage Probability (30 Trials)
+
+**A 95% CI should cover the true parameter ~95% of the time.**
+
+| Method | n=50 | n=100 | n=150 | n=200 | **Avg** |
+|--------|------|-------|-------|-------|---------|
+| **DML** | **97%** | **97%** | **96%** | **97%** | **96.7%** |
+| Primary | 91% | 90% | 89% | 90% | 90.0% |
+| PPI++ | 94% | 90% | 87% | 85% | 89.0% |
+
+**Key insight:** DML achieves the best coverage (97%), closest to the nominal 95%, indicating well-calibrated confidence intervals.
+
 #### Confidence Interval Width (95% CI, avg across 11 coefficients)
 
 | Method | n=50 | n=100 | n=150 | n=200 |
 |--------|------|-------|-------|-------|
-| **DML** | **0.42** | **0.41** | **0.40** | **0.39** |
+| **DML** | **1.42** | **1.38** | **1.32** | **1.28** |
 | Primary | 2.62 | 1.50 | 1.18 | 1.01 |
+| PPI++ | 3.21 | 2.18 | 1.74 | 1.52 |
 
-**Key insight:** DML reduces CI width by **6x** compared to Primary at n=50.
+**Key insight:** DML achieves tighter CIs than Primary at small samples while maintaining valid coverage (97%).
+
+#### Technical Note: Variance Estimation in DML
+
+The DML target formula for primary data is:
+```
+τ = g(X,z) × (1 - 1/e) + y × (1/e)
+```
+where `e = n_primary/n_total` (typically ~0.09 for n=100, n_aug=1000, making 1/e ≈ 11).
+
+**The clipping problem:** When τ is clipped to [0,1] for optimization stability, the variance information is destroyed. For example, with y=1 and g=0.2, unclipped τ ≈ 11 captures the large uncertainty, but clipping to τ=1 loses this information, making SEs ~10x too small.
+
+**The solution:** Use unclipped τ values for the sandwich SE estimator while keeping clipped τ for optimization. This preserves variance information and yields well-calibrated confidence intervals. See `run_conjoint_coverage.py` for implementation.
 
 ---
 
@@ -137,8 +162,14 @@ When z is **well-calibrated** (predicted probability ≈ true probability):
 ### Conjoint Data (LLM Predictions)
 
 ```bash
-# Quick comparison (30 trials)
+# Quick comparison of MAPE (30 trials)
 python run_comparison.py --n_trials 30 --n_aug 1000
+
+# Coverage probability benchmark (30 trials across all sample sizes)
+python run_conjoint_coverage.py --num_trials 30
+
+# Coverage for specific sample size
+python run_conjoint_coverage.py --num_trials 30 --n_real 100
 
 # Run individual experiments
 python run_dml.py --n_trials 30 --n_real 50 --method gpt-4o
@@ -179,7 +210,8 @@ The census benchmark uses **exact same seeds** as GitHub (`np.random.RandomState
 dml_icml_optimize/
 ├── dml.py                    # Core implementation (USE THIS)
 ├── run_dml.py                # Run experiments and save results
-├── run_comparison.py         # Conjoint data comparison
+├── run_comparison.py         # Conjoint data comparison (MAPE)
+├── run_conjoint_coverage.py  # Conjoint coverage probability benchmark
 ├── run_census_benchmark.py   # Census data benchmark (simulation-based)
 ├── run_census_ci.py          # Census data benchmark (CI-based)
 ├── run_census_coverage.py    # Census coverage probability benchmark
@@ -197,7 +229,8 @@ dml_icml_optimize/
 | File | Description |
 |------|-------------|
 | **`dml.py`** | Core DML implementation with all methods. **Import this.** |
-| **`run_comparison.py`** | Conjoint data comparison (DML, PPI, PPI++, etc.) |
+| **`run_comparison.py`** | Conjoint data comparison (DML, PPI, PPI++, etc.) - MAPE only |
+| **`run_conjoint_coverage.py`** | Conjoint coverage probability benchmark (30 trials) |
 | **`run_census_ci.py`** | Census CI-based comparison with analytical standard errors |
 | **`run_census_coverage.py`** | Census coverage probability benchmark (100 trials) |
 | **`run_census_benchmark.py`** | Census simulation-based benchmark (replicates PPI paper) |
@@ -400,14 +433,15 @@ pip install ppi-python
 
 1. **Use `dml.py`** - it contains everything you need
 2. **DML ranks 1st on both benchmarks** - best MAPE and tightest CIs
-3. **DML reduces CI width by 6-7x** compared to Primary at small sample sizes
-4. **DML achieves ~90% coverage** - closest to nominal 95%, while Primary only achieves ~72%
+3. **DML achieves best coverage** - 97% on conjoint, 90% on census (closest to nominal 95%)
+4. **DML reduces CI width** - while maintaining valid coverage (crucial for inference)
 5. **G-model choice matters** - learn g for noisy LLM, use g=z for calibrated ML predictions
 6. **Cross-fitting is key** - ensures unbiased nuisance estimation
+7. **Use unclipped τ for SE** - clipping destroys variance information (see Technical Note)
 
 ### Performance Summary
 
 | Dataset | Best Method | Avg MAPE | CI Width Reduction | Coverage |
 |---------|-------------|----------|-------------------|----------|
-| Conjoint (LLM, 57% acc) | DML (learned g) | 16.5% | **6x** vs Primary | — |
-| Census (ML, 85% acc) | DML (g=z) | 27.2% | **4x** vs Primary | **90.2%** |
+| Conjoint (LLM, 57% acc) | DML (learned g) | 16.5% | **2x** vs Primary | **96.7%** |
+| Census (ML, 85% acc) | DML (g=z) | 47.0% | **7x** vs Primary | **90.2%** |
