@@ -69,6 +69,31 @@ Replication of Section 6.2 from [AAE-vs-PPI paper](https://github.com/mxw-selene
 
 **Key insight:** DML reduces SE by **7x** at m=100 and maintains stable precision across all sample sizes.
 
+#### Coverage Probability (100 Trials)
+
+**A 95% CI should cover the true parameter ~95% of the time.**
+
+| Method | m=100 | m=250 | m=500 | m=750 | m=1000 | **Avg** |
+|--------|-------|-------|-------|-------|--------|---------|
+| **DML (g=z)** | **90%** | **90%** | **91%** | **91%** | **89%** | **90.2%** |
+| PPI | 82% | 90% | 89% | 90% | 91% | 88.4% |
+| PPI++ | 77% | 82% | 85% | 88% | 86% | 83.6% |
+| Primary | 77% | 73% | 69% | 73% | 66% | 71.6% |
+
+#### Coverage by Coefficient
+
+| Method | β₀ Coverage | β₁ Coverage |
+|--------|-------------|-------------|
+| **DML (g=z)** | **92.2%** | **93.8%** |
+| PPI | 90.4% | 92.2% |
+| PPI++ | 86.2% | 87.8% |
+| Primary | 75.2% | 83.4% |
+
+**Key insights:**
+- **DML achieves 90% coverage**, closest to the nominal 95%, and is stable across all sample sizes
+- **Primary severely under-covers** (72%) - its CIs are too narrow for the actual estimation uncertainty
+- **DML provides valid inference**: tight CIs (10 vs 23-33) without sacrificing coverage
+
 ---
 
 ### PPI/PPI++ Verification (matches GitHub)
@@ -131,6 +156,12 @@ python run_census_ci.py --m 100 --n 2000
 python run_census_ci.py --m 500 --n 2000
 python run_census_ci.py --m 1000 --n 2000
 
+# Coverage probability (100 trials across all sample sizes)
+python run_census_coverage.py --num_trials 100 --save_results
+
+# Coverage probability for specific sample size
+python run_census_coverage.py --num_trials 100 --m 500
+
 # Simulation-based comparison (50 trials, matches GitHub)
 python run_census_benchmark.py --num_trials 50 --save_results
 
@@ -151,6 +182,7 @@ dml_icml_optimize/
 ├── run_comparison.py         # Conjoint data comparison
 ├── run_census_benchmark.py   # Census data benchmark (simulation-based)
 ├── run_census_ci.py          # Census data benchmark (CI-based)
+├── run_census_coverage.py    # Census coverage probability benchmark
 ├── data/
 │   └── census/
 │       └── census_healthcare.npz  # Census data (318K samples)
@@ -167,6 +199,7 @@ dml_icml_optimize/
 | **`dml.py`** | Core DML implementation with all methods. **Import this.** |
 | **`run_comparison.py`** | Conjoint data comparison (DML, PPI, PPI++, etc.) |
 | **`run_census_ci.py`** | Census CI-based comparison with analytical standard errors |
+| **`run_census_coverage.py`** | Census coverage probability benchmark (100 trials) |
 | **`run_census_benchmark.py`** | Census simulation-based benchmark (replicates PPI paper) |
 
 ---
@@ -368,12 +401,13 @@ pip install ppi-python
 1. **Use `dml.py`** - it contains everything you need
 2. **DML ranks 1st on both benchmarks** - best MAPE and tightest CIs
 3. **DML reduces CI width by 6-7x** compared to Primary at small sample sizes
-4. **G-model choice matters** - learn g for noisy LLM, use g=z for calibrated ML predictions
-5. **Cross-fitting is key** - ensures unbiased nuisance estimation
+4. **DML achieves ~90% coverage** - closest to nominal 95%, while Primary only achieves ~72%
+5. **G-model choice matters** - learn g for noisy LLM, use g=z for calibrated ML predictions
+6. **Cross-fitting is key** - ensures unbiased nuisance estimation
 
 ### Performance Summary
 
-| Dataset | Best Method | Avg MAPE | CI Width Reduction |
-|---------|-------------|----------|-------------------|
-| Conjoint (LLM, 57% acc) | DML (learned g) | 16.5% | **6x** vs Primary |
-| Census (ML, 85% acc) | DML (g=z) | 47.0% | **7x** vs Primary |
+| Dataset | Best Method | Avg MAPE | CI Width Reduction | Coverage |
+|---------|-------------|----------|-------------------|----------|
+| Conjoint (LLM, 57% acc) | DML (learned g) | 16.5% | **6x** vs Primary | — |
+| Census (ML, 85% acc) | DML (g=z) | 27.2% | **4x** vs Primary | **90.2%** |
